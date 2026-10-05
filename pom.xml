@@ -27,7 +27,7 @@
         <!-- Общий стандарт авторизации (../gate-auth). Пока не опубликован в Maven Central:
              локально — mvn install в ../gate-auth, в Docker — собирается из additional context
              (см. Dockerfile и docker-compose.yml). -->
-        <gate-auth.version>0.1.0-SNAPSHOT</gate-auth.version>
+        <gate-auth.version>0.1.0</gate-auth.version>
     </properties>
 
     <dependencies>
