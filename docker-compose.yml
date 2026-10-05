@@ -1,0 +1,57 @@
+# Разворачивается на primary VPS (144.31.187.7), рядом с уже поднятым pg-primary.
+# Перед стартом: cp .env.example .env и заполнить .env.
+
+services:
+
+  gate:
+    build: .
+    container_name: gate-service
+    restart: unless-stopped
+    env_file: .env
+    # Сеть хоста, а не bridge. Upstream сервисов — это 127.0.0.1:8080, локальный конец
+    # SSH-туннеля на VPS, и туннель слушает только loopback хоста. Из bridge-контейнера
+    # 127.0.0.1 — это сам контейнер, и проверка доступности на /admin/services
+    # всегда показывала бы «недоступен», даже при живом туннеле.
+    # С network_mode: host секция ports не действует — поэтому bind задаётся явно.
+    network_mode: host
+    environment:
+      # ТОЛЬКО localhost. Гейт не должен быть доступен из интернета:
+      # к нему обращается один Nginx с этой же машины, а доверие к X-Forwarded-For
+      # держится ровно на том, что снаружи до этого порта не достучаться.
+      GATE_BIND_ADDRESS: 127.0.0.1
+      GATE_PORT: 9000
+      GATE_DB_HOST: ${GATE_DB_HOST:-144.31.187.7}
+      # ⚠️ НЕ включать здесь SPRING_PROFILES_ACTIVE=dev.
+      # Профиль dev выключает Secure у cookie сессии, подставляет общеизвестный ключ
+      # remember-me и пароль админа по умолчанию. На машине, смотрящей в интернет,
+      # это дыра. Для локального прогона всего стека есть docker-compose.dev.yml.
+    logging:
+      driver: json-file
+      options:
+        # Логи читает Dozzle; без ограничения они съедят диск на 30 ГБ.
+        max-size: "10m"
+        max-file: "3"
+
+  # Просмотр логов контейнеров в браузере.
+  #
+  # Dozzle показывает stdout контейнеров, а не действия пользователей: журнал активности
+  # с фильтрами по пользователям и отказам живёт в самом гейте, на /admin/activity.
+  # Здесь Dozzle полезен другим — видно логи Postgres, Nginx и самого гейта, включая то,
+  # что случилось до того, как запись в БД стала возможна.
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    volumes:
+      # Read-only: доступ к docker.sock равносилен root на хосте, и давать его
+      # на запись контейнеру с веб-интерфейсом незачем.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      # Тоже только на localhost. Наружу — через Nginx с auth_request к гейту:
+      # заведите сервис dozzle с upstream 127.0.0.1:9001 на странице /admin/services,
+      # и логи закроются той же авторизацией, что и всё остальное.
+      - "127.0.0.1:9001:8080"
+    environment:
+      DOZZLE_NO_ANALYTICS: "true"
+      # Собственную авторизацию Dozzle не включаем — её роль выполняет гейт.
+      DOZZLE_LEVEL: info

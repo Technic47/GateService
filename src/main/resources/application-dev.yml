@@ -1,0 +1,47 @@
+# Профиль для локальной отладки:
+#   docker compose -f docker-compose.dev.yml up -d
+#   mvn spring-boot:run -Dspring-boot.run.profiles=dev
+#
+# База берётся ЛОКАЛЬНАЯ, не primary с VPS. Достучаться до primary с домашней машины
+# нельзя: порт 5432 отвечает, но pg_hba.conf пускает только standby (2.26.60.167) и только
+# для репликации, так что соединение умирает на аутентификации —
+#   FATAL: no pg_hba.conf entry for host "...", user "gate", database "gate"
+# а Hibernate потом сообщает об этом крайне невнятно ("Unable to determine Dialect").
+#
+# Если нужен именно primary — SSH-туннель, без правки pg_hba на сервере:
+#   ssh -L 5433:localhost:5432 user@144.31.187.7
+#   GATE_DB_HOST=localhost GATE_DB_PORT=5433 mvn spring-boot:run -Dspring-boot.run.profiles=dev
+
+server:
+  address: 0.0.0.0
+  servlet:
+    session:
+      cookie:
+        # По http Secure-кука не уедет, поэтому только для локальной отладки.
+        secure: false
+
+spring:
+  datasource:
+    # Хост переопределяем, но по умолчанию localhost — в отличие от прод-профиля,
+    # где по умолчанию стоит адрес primary. Жёстко зашивать localhost нельзя:
+    # тогда сломается и запуск в контейнере (там localhost — сам контейнер,
+    # БД живёт под именем postgres-dev), и доступ к primary через SSH-туннель.
+    url: jdbc:postgresql://${GATE_DB_HOST:localhost}:${GATE_DB_PORT:5432}/${GATE_DB_NAME:gate}
+    username: ${GATE_DB_USER:gate}
+    # Дефолт совпадает с docker-compose.dev.yml — .env для локального запуска не нужен.
+    password: ${GATE_DB_PASSWORD:gatedev}
+
+  thymeleaf:
+    # Шаблоны перечитываются с диска — правку html видно без перезапуска.
+    cache: false
+
+gate:
+  remember-me-key: ${GATE_REMEMBER_ME_KEY:dev-only-not-for-production-key}
+  admin:
+    username: ${GATE_ADMIN_USERNAME:admin}
+    password: ${GATE_ADMIN_PASSWORD:admin12345}
+
+logging:
+  level:
+    com.technic.gate: DEBUG
+    org.springframework.security: DEBUG

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head('Вход')}"></head>
+<body>
+
+<div class="auth-wrap">
+    <div class="auth-card">
+
+        <div class="auth-logo">
+            <div class="mark">🔐</div>
+            <h1>Gate Service</h1>
+            <p>Доступ к сервисам домашнего сервера</p>
+        </div>
+
+        <!-- Вкладка регистрации исчезает целиком, если регистрация закрыта. -->
+        <div class="tabs" th:if="${registrationOpen}">
+            <a th:href="@{/login(redirect=${redirect})}"
+               th:classappend="${activeTab == 'login'} ? 'active'">Вход</a>
+            <a th:href="@{/login(tab='register', redirect=${redirect})}"
+               th:classappend="${activeTab == 'register'} ? 'active'">Регистрация</a>
+        </div>
+
+        <div th:if="${errorText}" class="alert alert-error" th:text="${errorText}"></div>
+        <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}"></div>
+        <div th:if="${logout}" class="alert alert-info">Вы вышли из системы.</div>
+        <div th:if="${registered}" class="alert alert-success">
+            Аккаунт создан. Можно входить.
+        </div>
+        <div th:if="${pending}" class="alert alert-info">
+            Аккаунт создан и ждёт одобрения администратора. После одобрения вход заработает.
+        </div>
+
+        <!-- ---------- Вход ---------- -->
+        <form th:if="${activeTab == 'login'}" th:action="@{/login}" method="post">
+            <input type="hidden" name="redirect" th:value="${redirect}">
+
+            <div class="field">
+                <label for="username">Логин</label>
+                <input type="text" id="username" name="username"
+                       autocomplete="username" autofocus required>
+            </div>
+
+            <div class="field">
+                <label for="password">Пароль</label>
+                <input type="password" id="password" name="password"
+                       autocomplete="current-password" required>
+            </div>
+
+            <div class="check">
+                <input type="checkbox" id="remember-me" name="remember-me">
+                <label for="remember-me">Запомнить меня на этом устройстве</label>
+            </div>
+
+            <button type="submit" class="btn btn-block">Войти</button>
+        </form>
+
+        <!-- ---------- Регистрация ---------- -->
+        <form th:if="${activeTab == 'register' and registrationOpen}"
+              th:action="@{/register}" method="post">
+            <input type="hidden" name="redirect" th:value="${redirect}">
+
+            <div class="field">
+                <label for="reg-username">Логин</label>
+                <input type="text" id="reg-username" name="username"
+                       autocomplete="username" autofocus required
+                       minlength="3" maxlength="64" pattern="[A-Za-z0-9._\-]{3,64}">
+                <div class="hint">3–64 символа: латиница, цифры, точка, дефис, подчёркивание.</div>
+            </div>
+
+            <div class="field">
+                <label for="reg-password">Пароль</label>
+                <input type="password" id="reg-password" name="password"
+                       autocomplete="new-password" required
+                       th:attr="minlength=${passwordMinLength}">
+                <div class="hint">
+                    Минимум <span th:text="${passwordMinLength}">8</span> символов.
+                </div>
+            </div>
+
+            <div class="field">
+                <label for="reg-confirm">Пароль ещё раз</label>
+                <input type="password" id="reg-confirm" name="confirmPassword"
+                       autocomplete="new-password" required
+                       th:attr="minlength=${passwordMinLength}">
+            </div>
+
+            <div th:if="${registrationMode?.name() == 'APPROVAL'}" class="alert alert-info">
+                Новые аккаунты активирует администратор — войти сразу после регистрации
+                не получится.
+            </div>
+
+            <button type="submit" class="btn btn-block">Зарегистрироваться</button>
+        </form>
+
+    </div>
+</div>
+
+</body>
+</html>

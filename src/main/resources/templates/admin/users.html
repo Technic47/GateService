@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head('Пользователи')}"></head>
+<body>
+
+<header th:replace="~{layout :: topbar}"></header>
+
+<div class="page">
+    <div th:replace="~{layout :: flash}"></div>
+
+    <div class="page-head">
+        <h1>Пользователи</h1>
+        <p>Создание и блокировка учётных записей, выдача доступа к сервисам.</p>
+    </div>
+
+    <div class="actions" style="margin-top:0;margin-bottom:18px">
+        <a class="btn" th:href="@{/admin/users/new}">Добавить пользователя</a>
+    </div>
+
+    <div class="card card-tight">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Логин</th>
+                    <th>Роль</th>
+                    <th>Состояние</th>
+                    <th>Доступ к сервисам</th>
+                    <th>Последний вход</th>
+                    <th class="right">Действия</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="user : ${users}">
+
+                    <td>
+                        <strong th:text="${user.username}">user</strong>
+                        <div class="muted" style="font-size:12px"
+                             th:text="'создан ' + ${@fmt.dateTime(user.createdAt)}">создан</div>
+                    </td>
+
+                    <td>
+                        <span class="badge"
+                              th:classappend="${user.admin} ? 'badge-admin' : 'badge-user'"
+                              th:text="${user.admin} ? 'ADMIN' : 'USER'">USER</span>
+                    </td>
+
+                    <td class="nowrap">
+                        <span th:if="${user.blocked}" class="badge badge-bad">заблокирован</span>
+                        <span th:if="${!user.blocked and !user.approved}"
+                              class="badge badge-warn">ждёт одобрения</span>
+                        <span th:if="${!user.blocked and user.approved and user.temporarilyLocked}"
+                              class="badge badge-warn">временный лок</span>
+                        <span th:if="${user.active}" class="badge badge-ok">активен</span>
+                    </td>
+
+                    <!-- Быстрое редактирование доступов прямо в списке: без чекбоксов тут
+                         пришлось бы заходить в карточку ради одной галочки. -->
+                    <td>
+                        <span th:if="${user.services.isEmpty()}" class="muted">—</span>
+                        <span th:each="s : ${user.services}" class="badge badge-user"
+                              style="margin-right:4px" th:text="${s.name}">service</span>
+
+                        <details class="help" th:if="${!allServices.isEmpty()}">
+                            <summary>изменить</summary>
+                            <div>
+                                <form th:action="@{/admin/users/{id}/access(id=${user.id})}"
+                                      method="post">
+                                    <div class="check" th:each="svc : ${allServices}">
+                                        <input type="checkbox" name="serviceIds"
+                                               th:id="'acc-' + ${user.id} + '-' + ${svc.id}"
+                                               th:value="${svc.id}"
+                                               th:checked="${user.services.contains(svc)}">
+                                        <label th:for="'acc-' + ${user.id} + '-' + ${svc.id}"
+                                               th:text="${svc.displayName} + ' (' + ${svc.name} + ')'">
+                                            Сервис
+                                        </label>
+                                    </div>
+                                    <button type="submit" class="btn btn-sm">Сохранить доступы</button>
+                                </form>
+                            </div>
+                        </details>
+                    </td>
+
+                    <td class="nowrap muted" th:text="${@fmt.ago(user.lastLoginAt)}">никогда</td>
+
+                    <td class="right nowrap">
+                        <a class="btn btn-secondary btn-sm"
+                           th:href="@{/admin/users/{id}(id=${user.id})}">Изменить</a>
+
+                        <form class="inline-form" method="post"
+                              th:action="@{/admin/users/{id}/block(id=${user.id})}">
+                            <input type="hidden" name="blocked"
+                                   th:value="${user.blocked} ? 'false' : 'true'">
+                            <button type="submit" class="btn btn-secondary btn-sm"
+                                    th:text="${user.blocked} ? 'Разблокировать' : 'Заблокировать'">
+                                Заблокировать
+                            </button>
+                        </form>
+
+                        <form class="inline-form" method="post"
+                              th:action="@{/admin/users/{id}/delete(id=${user.id})}"
+                              th:attr="onsubmit=|return confirm('Удалить пользователя ${user.username}? Это необратимо.')|">
+                            <button type="submit" class="btn btn-danger btn-sm">Удалить</button>
+                        </form>
+                    </td>
+                </tr>
+
+                <tr th:if="${users.isEmpty()}">
+                    <td colspan="6" class="muted" style="text-align:center;padding:30px">
+                        Пользователей нет.
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

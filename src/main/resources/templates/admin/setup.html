@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head('Настройки гейта')}"></head>
+<body>
+
+<header th:replace="~{layout :: topbar}"></header>
+
+<div class="page">
+    <div th:replace="~{layout :: flash}"></div>
+
+    <div class="page-head">
+        <h1>Настройки гейта</h1>
+        <p>Политика доступа, состояние инфраструктуры и готовый конфиг для Nginx.</p>
+    </div>
+
+    <!-- ============ Состояние ============ -->
+    <h3>Состояние</h3>
+    <div class="stats">
+        <div class="stat">
+            <div class="value mono" th:text="'127.0.0.1:' + ${serverPort}">:9000</div>
+            <div class="label">адрес гейта</div>
+        </div>
+        <div class="stat">
+            <div class="value" th:text="${uptime}">—</div>
+            <div class="label">аптайм</div>
+        </div>
+        <div class="stat">
+            <div class="value" th:text="${heapUsedMb} + ' МБ'">—</div>
+            <div class="label">занято в куче</div>
+        </div>
+        <div class="stat">
+            <div class="value" style="font-size:15px"
+                 th:text="${db.reachable()} ? ${db.version()} : 'недоступна'"
+                 th:style="${db.reachable()} ? 'font-size:15px' : 'font-size:15px;color:var(--danger)'">—</div>
+            <div class="label">база данных</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>PostgreSQL и репликация</h2>
+
+        <div th:if="${!db.reachable()}" class="alert alert-error"
+             th:text="'Нет связи с базой: ' + ${db.error()}"></div>
+
+        <th:block th:if="${db.reachable()}">
+            <p class="muted" style="font-size:13.5px;margin-top:0">
+                Приложение подключено к
+                <strong th:text="${db.inRecovery()} ? 'standby (режим восстановления)' : 'primary'">primary</strong>.
+                <span th:if="${db.inRecovery()}" style="color:var(--warn)">
+                    Это реплика — запись работать не будет. Проверьте адрес базы в конфигурации.
+                </span>
+            </p>
+
+            <div th:if="${db.replicas().isEmpty()}" class="alert alert-warn">
+                Ни одной подключённой реплики не видно. Либо standby отключён, либо у пользователя
+                приложения нет прав на <span class="mono">pg_stat_replication</span>
+                (нужна роль <span class="mono">pg_monitor</span>).
+            </div>
+
+            <div class="table-wrap" th:unless="${db.replicas().isEmpty()}">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Адрес реплики</th>
+                        <th>Состояние</th>
+                        <th>Режим</th>
+                        <th>Отставание</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="r : ${db.replicas()}">
+                        <td class="mono" th:text="${r.clientAddr()}">—</td>
+                        <td>
+                            <span class="badge"
+                                  th:classappend="${r.state() == 'streaming'} ? 'badge-ok' : 'badge-warn'"
+                                  th:text="${r.state()}">streaming</span>
+                        </td>
+                        <td class="mono" th:text="${r.syncState()}">async</td>
+                        <td class="mono" th:text="${r.lag()}">0 bytes</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <details class="help">
+                <summary>Что здесь стоит проверить</summary>
+                <div>
+                    <p><strong>state = streaming</strong> — реплика получает WAL в реальном времени.
+                        Значения <span class="mono">catchup</span> или пустая таблица означают, что
+                        репликация встала.</p>
+                    <p><strong>Отставание</strong> — разница между отправленным и применённым WAL.
+                        Единицы килобайт нормальны, устойчивый рост означает, что standby не успевает
+                        или потерял связь.</p>
+                    <p>По заметкам проекта репликация сейчас идёт между двумя хостерами по
+                        открытому интернету <strong>без TLS</strong>. Пока это не закрыто, трафик WAL,
+                        включая содержимое строк, виден на всём пути. Стоит либо включить
+                        <span class="mono">sslmode=require</span> для соединения репликации, либо
+                        завернуть его в тот же WireGuard, что уже поднят на обеих машинах.</p>
+                </div>
+            </details>
+        </th:block>
+    </div>
+
+    <!-- ============ Настройки ============ -->
+    <form th:action="@{/admin/setup}" method="post">
+
+        <div class="grid-2">
+
+            <div class="card">
+                <h2>Регистрация</h2>
+
+                <div class="field">
+                    <label for="registrationMode">Режим регистрации</label>
+                    <select id="registrationMode" name="registrationMode">
+                        <option th:each="m : ${registrationModes}" th:value="${m}"
+                                th:selected="${settings.registrationMode() == m}"
+                                th:text="${m.label}"></option>
+                    </select>
+                    <div class="hint">
+                        Гейт смотрит наружу голым IP, и форму регистрации рано или поздно найдут
+                        сканеры. «С одобрением» — разумное значение по умолчанию: аккаунт заводится,
+                        но до вашего подтверждения не работает.
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="defaultRole">Роль нового пользователя</label>
+                    <select id="defaultRole" name="defaultRole">
+                        <option th:each="r : ${roles}" th:value="${r}"
+                                th:selected="${settings.defaultRole() == r}" th:text="${r}"></option>
+                    </select>
+                    <div class="hint">Менять на ADMIN не нужно — роль выдаётся вручную в карточке.</div>
+                </div>
+
+                <div class="field">
+                    <label for="autoGrantServices">Автовыдача сервисов</label>
+                    <input type="text" id="autoGrantServices" name="autoGrantServices"
+                           placeholder="fashionmark, другой-сервис"
+                           th:value="${settings.autoGrantServices()}">
+                    <div class="hint">
+                        Машинные имена через запятую. Новый пользователь получит доступ сразу
+                        при регистрации. Пусто — доступ выдаётся только руками.
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Защита входа</h2>
+
+                <div class="row">
+                    <div class="field">
+                        <label for="maxFailedAttempts">Попыток до блокировки</label>
+                        <input type="number" id="maxFailedAttempts" name="maxFailedAttempts"
+                               min="0" max="100" th:value="${settings.maxFailedAttempts()}">
+                    </div>
+                    <div class="field">
+                        <label for="lockoutMinutes">Блокировка, мин</label>
+                        <input type="number" id="lockoutMinutes" name="lockoutMinutes"
+                               min="1" max="1440" th:value="${settings.lockoutMinutes()}">
+                    </div>
+                </div>
+                <div class="hint" style="margin-top:-6px">
+                    0 попыток отключает блокировку совсем. 5 попыток на 15 минут делает перебор
+                    бессмысленным, а живому человеку опечататься не мешает. Счётчик хранится в БД
+                    и переживает перезапуск сервиса.
+                </div>
+
+                <div class="field" style="margin-top:15px">
+                    <label for="passwordMinLength">Минимальная длина пароля</label>
+                    <input type="number" id="passwordMinLength" name="passwordMinLength"
+                           min="4" max="128" th:value="${settings.passwordMinLength()}">
+                    <div class="hint">Проверяется при регистрации и при сбросе пароля админом.</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Сессии</h2>
+
+                <div class="field">
+                    <label for="sessionTimeoutMinutes">Таймаут бездействия, мин</label>
+                    <input type="number" id="sessionTimeoutMinutes" name="sessionTimeoutMinutes"
+                           min="5" max="10080" th:value="${settings.sessionTimeoutMinutes()}">
+                    <div class="hint">
+                        Применяется к сессиям, созданным после сохранения; уже открытые доживают
+                        со старым значением. 480 минут — рабочий день.
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="rememberMeDays">«Запомнить меня», дней</label>
+                    <input type="number" id="rememberMeDays" name="rememberMeDays"
+                           min="1" max="365" th:value="${settings.rememberMeDays()}">
+                    <div class="hint">
+                        Вступает в силу после перезапуска сервиса: срок жизни токена задаётся
+                        при сборке цепочки фильтров Spring Security.
+                    </div>
+                </div>
+
+                <div class="alert alert-info" style="font-size:13px">
+                    Сессия живёт в памяти процесса. Перезапуск гейта разлогинивает всех, у кого
+                    не отмечено «запомнить меня», — это нормально и лечится только внешним
+                    хранилищем сессий, которое здесь избыточно.
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Журнал активности</h2>
+
+                <div class="field">
+                    <label for="activityRetentionDays">Срок хранения, дней</label>
+                    <input type="number" id="activityRetentionDays" name="activityRetentionDays"
+                           min="0" max="3650" th:value="${settings.activityRetentionDays()}">
+                    <div class="hint">
+                        Старые записи удаляются ежедневно в 03:30. 0 — хранить вечно
+                        (на 30 ГБ диска VPS так лучше не делать).
+                    </div>
+                </div>
+
+                <div class="check">
+                    <input type="checkbox" id="logAllowedVerifies" name="logAllowedVerifies"
+                           value="true" th:checked="${settings.logAllowedVerifies()}">
+                    <label for="logAllowedVerifies">
+                        Писать в журнал разрешённые проверки
+                        <div class="hint">
+                            Nginx дёргает <span class="mono">/verify</span> на каждый запрос,
+                            включая картинки и стили. Включать стоит только на время разбора
+                            конкретной проблемы — иначе журнал заполнится за минуты.
+                            Отказы пишутся всегда, независимо от этой галочки.
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="card">
+            <h2>Режим работы гейта</h2>
+
+            <div class="check">
+                <input type="checkbox" id="maintenanceMode" name="maintenanceMode" value="true"
+                       th:checked="${settings.maintenanceMode()}">
+                <label for="maintenanceMode">
+                    Режим обслуживания
+                    <div class="hint">
+                        Гейт отказывает всем, кроме администраторов. Удобно, когда домашний сервер
+                        выключен или туннель переподнимается: пользователи получают понятный отказ
+                        вместо таймаута.
+                    </div>
+                </label>
+            </div>
+
+            <div class="check">
+                <input type="checkbox" id="adminBypassesAccess" name="adminBypassesAccess"
+                       value="true" th:checked="${settings.adminBypassesAccess()}">
+                <label for="adminBypassesAccess">
+                    Администратор имеет доступ ко всем сервисам
+                    <div class="hint">
+                        Без этой галочки вам придётся выдавать доступ самому себе в каждый новый
+                        сервис. Выключайте, только если админ действительно не должен видеть
+                        содержимое сервисов.
+                    </div>
+                </label>
+            </div>
+
+            <div class="row" style="margin-top:16px">
+                <div class="field">
+                    <label for="publicUrl">Публичный адрес гейта</label>
+                    <input type="text" id="publicUrl" name="publicUrl"
+                           placeholder="https://144.31.187.7:9443"
+                           th:value="${settings.publicUrl()}">
+                    <div class="hint">
+                        Куда Nginx перенаправляет неавторизованных. Подставляется в конфиг ниже.
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="serviceHeaderName">Заголовок с именем сервиса</label>
+                    <input type="text" id="serviceHeaderName" name="serviceHeaderName"
+                           th:value="${settings.serviceHeaderName()}">
+                    <div class="hint">
+                        Менять без необходимости не стоит — значение должно совпадать
+                        с <span class="mono">proxy_set_header</span> в конфиге Nginx.
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button type="submit" class="btn">Сохранить настройки</button>
+            </div>
+        </div>
+    </form>
+
+    <!-- ============ Конфиг Nginx ============ -->
+    <div class="card">
+        <h2>Конфиг Nginx под текущие сервисы</h2>
+        <p class="muted" style="font-size:13.5px;margin-top:0">
+            Сгенерирован по списку включённых сервисов. Имена в
+            <span class="mono">X-Service-Name</span> уже подставлены — именно в них обычно
+            и заводится опечатка, если писать конфиг руками.
+        </p>
+        <pre class="code" th:text="${nginxConfig}"></pre>
+    </div>
+
+    <!-- ============ Обслуживание ============ -->
+    <div class="card">
+        <h2>Обслуживание</h2>
+        <form th:action="@{/admin/setup/purge-activity}" method="post" class="inline-form">
+            <button type="submit" class="btn btn-secondary">Почистить журнал сейчас</button>
+        </form>
+        <span class="muted" style="font-size:13px;margin-left:10px">
+            Удалит записи старше текущего срока хранения, не дожидаясь ночного запуска.
+        </span>
+    </div>
+
+    <!-- ============ Чеклист ============ -->
+    <div class="card">
+        <h2>Что проверить перед тем, как открывать доступ</h2>
+        <details class="help" open>
+            <summary>Чеклист</summary>
+            <div>
+                <p><strong>1. Порт гейта не смотрит в интернет.</strong>
+                    Гейт слушает <span class="mono">127.0.0.1</span>, и так и должно быть:
+                    к нему ходит только Nginx с той же машины. Проверьте
+                    <span class="mono">ss -tulnp</span> и правила фаервола — если порт
+                    <span class="mono" th:text="${serverPort}">9000</span> открыт наружу,
+                    заголовок <span class="mono">X-Forwarded-For</span> можно подделать,
+                    и в журнале окажутся любые IP, какие пожелает злоумышленник.</p>
+
+                <p><strong>2. Cookie выставляется с Secure.</strong>
+                    Гейт и сервисы должны быть за HTTPS. Куки не различают порты, поэтому
+                    сессия, выданная гейтом на <span class="mono">144.31.187.7</span>,
+                    уедет и на порт 8843 — на этом схема и держится без домена.
+                    Но по HTTP та же кука уйдёт открытым текстом.</p>
+
+                <p><strong>3. GATE_REMEMBER_ME_KEY задан и постоянен.</strong>
+                    Иначе «запомнить меня» будет слетать при каждом перезапуске,
+                    а при известном ключе — подделываться.</p>
+
+                <p><strong>4. Пароль администратора сменён.</strong>
+                    Если при первом старте он был сгенерирован, он остался только
+                    в логе того запуска.</p>
+
+                <p><strong>5. Nginx отдаёт 401 и 403 по-разному.</strong>
+                    401 — на форму логина, 403 — на страницу отказа. Если оба ведут на логин,
+                    пользователь без доступа попадёт в бесконечный редирект: он уже вошёл,
+                    логин снова отправит его в сервис, сервис снова ответит 403.</p>
+
+                <p><strong>6. Репликация всё ещё streaming.</strong>
+                    Таблица выше это показывает. Отдельно стоит хоть раз проверить
+                    <span class="mono">pg_promote()</span> на standby — репликация без
+                    проверенного failover даёт ложное чувство надёжности.</p>
+            </div>
+        </details>
+    </div>
+
+</div>
+
+</body>
+</html>

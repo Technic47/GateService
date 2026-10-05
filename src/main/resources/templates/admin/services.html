@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head('Сервисы')}"></head>
+<body>
+
+<header th:replace="~{layout :: topbar}"></header>
+
+<div class="page">
+    <div th:replace="~{layout :: flash}"></div>
+
+    <div class="page-head">
+        <h1>Настройка сервисов</h1>
+        <p>Что именно закрывает гейт и куда проксировать после успешной проверки.</p>
+    </div>
+
+    <div class="actions" style="margin-top:0;margin-bottom:18px">
+        <a class="btn" th:href="@{/admin/services/new}">Добавить сервис</a>
+        <a class="btn btn-secondary" th:href="@{/admin/services(probe=1)}">Проверить доступность</a>
+        <span class="muted" style="font-size:13px">
+            Проверка — обычный TCP-коннект к host:port, до 1.5 с на сервис.
+        </span>
+    </div>
+
+    <div class="card card-tight">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Сервис</th>
+                    <th>Имя для Nginx</th>
+                    <th>Upstream (host:port)</th>
+                    <th>Публичный URL</th>
+                    <th>Состояние</th>
+                    <th th:if="${health}">Доступность</th>
+                    <th class="right">Действия</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="svc : ${services}">
+                    <td>
+                        <span th:text="${svc.icon} ?: '🧩'">🧩</span>
+                        <strong th:text="${svc.displayName}">Сервис</strong>
+                        <div class="muted" style="font-size:12px" th:text="${svc.description}"></div>
+                    </td>
+
+                    <td class="mono" th:text="${svc.name}">name</td>
+
+                    <td class="mono nowrap" th:text="${svc.upstreamUrl()}">http://127.0.0.1:8080</td>
+
+                    <td class="mono">
+                        <span th:if="${svc.publicUrl}" th:text="${svc.publicUrl}"></span>
+                        <span th:unless="${svc.publicUrl}" class="muted">не задан</span>
+                    </td>
+
+                    <td>
+                        <span class="badge" th:classappend="${svc.enabled} ? 'badge-ok' : 'badge-warn'"
+                              th:text="${svc.enabled} ? 'включён' : 'отключён'">включён</span>
+                    </td>
+
+                    <td th:if="${health}" class="nowrap">
+                        <th:block th:with="h=${health.get(svc.id)}">
+                            <span th:if="${h != null and h.reachable()}" class="badge badge-ok"
+                                  th:text="'порт открыт · ' + ${h.millis()} + ' мс'">ок</span>
+                            <span th:if="${h != null and !h.reachable()}" class="badge badge-bad"
+                                  th:title="${h.error()}">недоступен</span>
+                        </th:block>
+                    </td>
+
+                    <td class="right nowrap">
+                        <a class="btn btn-secondary btn-sm"
+                           th:href="@{/admin/services/{id}(id=${svc.id})}">Изменить</a>
+                        <form class="inline-form" method="post"
+                              th:action="@{/admin/services/{id}/delete(id=${svc.id})}"
+                              th:attr="onsubmit=|return confirm('Удалить сервис ${svc.name}? Все выданные на него доступы пропадут.')|">
+                            <button type="submit" class="btn btn-danger btn-sm">Удалить</button>
+                        </form>
+                    </td>
+                </tr>
+
+                <tr th:if="${services.isEmpty()}">
+                    <td colspan="7" class="muted" style="text-align:center;padding:30px">
+                        Сервисов пока нет.
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Чем отличаются два адреса</h2>
+        <p class="muted" style="font-size:13.5px;margin:0 0 10px">
+            <strong>Upstream (host:port)</strong> — куда Nginx на VPS проксирует запрос после
+            того, как гейт разрешил доступ. Для FashionMark это <span class="mono">127.0.0.1:8080</span>,
+            то есть локальный конец reverse SSH-туннеля до домашнего сервера.
+        </p>
+        <p class="muted" style="font-size:13.5px;margin:0">
+            <strong>Публичный URL</strong> — куда гейт отправляет браузер пользователя после входа,
+            например <span class="mono">https://144.31.187.7:8843</span>. До адреса upstream браузер
+            не достучится: 127.0.0.1 на VPS — это сам VPS, а не машина пользователя.
+            Если публичный URL не задан, гейт подставит upstream, и переход из портала работать не будет.
+        </p>
+    </div>
+</div>
+
+</body>
+</html>

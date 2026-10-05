@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head('Выход')}"></head>
+<body>
+
+<!--
+  Страница, на которую можно попасть обычной ссылкой — из закладки или с кнопки «Выйти»,
+  которую Nginx встраивает в страницы сервиса. Сам выход только POST-ом с CSRF-токеном:
+  иначе любая чужая страница разлогинивала бы пользователя картинкой с src=/logout.
+-->
+<div class="auth-wrap">
+    <div class="auth-card" style="text-align:center">
+        <div class="auth-logo">
+            <div class="mark">🔐</div>
+            <h1>Выйти?</h1>
+        </div>
+
+        <p class="muted">
+            Вы вошли как <strong th:text="${currentUsername}">user</strong>.
+            Выход закроет доступ ко всем сервисам за гейтом.
+        </p>
+
+        <div class="actions" style="justify-content:center">
+            <form th:action="@{/logout}" method="post" class="inline-form">
+                <button type="submit" class="btn">Выйти</button>
+            </form>
+            <a class="btn btn-secondary" th:href="@{/portal}">Отмена</a>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

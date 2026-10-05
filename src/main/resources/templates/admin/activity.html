@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head('Журнал активности')}"></head>
+<body>
+
+<header th:replace="~{layout :: topbar}"></header>
+
+<div class="page">
+    <div th:replace="~{layout :: flash}"></div>
+
+    <div class="page-head">
+        <h1>Журнал активности</h1>
+        <p>Входы, отказы и действия администраторов. Те же события уходят одной строкой
+            в stdout — их видно в <span class="mono">docker logs</span> и в Dozzle.</p>
+    </div>
+
+    <div class="stats">
+        <div class="stat">
+            <div class="value" th:text="${totalElements}">0</div>
+            <div class="label">записей по фильтру</div>
+        </div>
+        <div class="stat">
+            <div class="value" th:text="${eventsLast24h}">0</div>
+            <div class="label">событий за сутки</div>
+        </div>
+        <div class="stat">
+            <div class="value" th:text="${failuresLast24h}"
+                 th:style="${failuresLast24h > 0} ? 'color:var(--danger)' : ''">0</div>
+            <div class="label">отказов за сутки</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <form method="get" th:action="@{/admin/activity}">
+            <div class="filters">
+                <div>
+                    <label for="username">Пользователь</label>
+                    <input type="text" id="username" name="username" placeholder="часть логина"
+                           th:value="${filterUsername}">
+                </div>
+
+                <div>
+                    <label for="category">Категория</label>
+                    <select id="category" name="category">
+                        <option value="">все</option>
+                        <option th:each="c : ${allCategories}" th:value="${c}"
+                                th:selected="${filterCategory != null and filterCategory == c}"
+                                th:text="${c.name() == 'AUTH'} ? 'вход/выход'
+                                       : (${c.name() == 'ACCESS'} ? 'доступ к сервисам' : 'действия админа')">
+                        </option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="type">Тип события</label>
+                    <select id="type" name="type">
+                        <option value="">все</option>
+                        <option th:each="t : ${allTypes}" th:value="${t}"
+                                th:selected="${filterType != null and filterType == t}"
+                                th:text="${t}"></option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="service">Сервис</label>
+                    <select id="service" name="service">
+                        <option value="">все</option>
+                        <option th:each="s : ${allServices}" th:value="${s.name}"
+                                th:selected="${filterService == s.name}"
+                                th:text="${s.name}"></option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="from">С даты</label>
+                    <input type="date" id="from" name="from" th:value="${filterFrom}">
+                </div>
+
+                <div>
+                    <label for="to">По дату</label>
+                    <input type="date" id="to" name="to" th:value="${filterTo}">
+                </div>
+            </div>
+
+            <div class="check" style="margin-top:14px">
+                <input type="checkbox" id="onlyFailures" name="onlyFailures" value="true"
+                       th:checked="${filterOnlyFailures}">
+                <label for="onlyFailures">Только отказы и неудачные попытки</label>
+            </div>
+
+            <div class="actions" style="margin-top:6px">
+                <button type="submit" class="btn">Показать</button>
+                <a class="btn btn-secondary" th:href="@{/admin/activity}">Сбросить</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="card card-tight">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Время</th>
+                    <th>Событие</th>
+                    <th>Пользователь</th>
+                    <th>Сервис</th>
+                    <th>IP</th>
+                    <th>Подробности</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="e : ${entries}">
+                    <td class="nowrap mono" th:text="${@fmt.precise(e.at)}">—</td>
+
+                    <td class="nowrap">
+                        <span class="badge"
+                              th:classappend="${e.success} ? 'badge-ok' : 'badge-bad'"
+                              th:text="${e.type}">EVENT</span>
+                    </td>
+
+                    <td>
+                        <span th:if="${e.username}" th:text="${e.username}">user</span>
+                        <span th:unless="${e.username}" class="muted">—</span>
+                    </td>
+
+                    <td class="mono">
+                        <span th:if="${e.serviceName}" th:text="${e.serviceName}"></span>
+                        <span th:unless="${e.serviceName}" class="muted">—</span>
+                    </td>
+
+                    <td class="mono nowrap">
+                        <span th:if="${e.ip}" th:text="${e.ip}"></span>
+                        <span th:unless="${e.ip}" class="muted">—</span>
+                    </td>
+
+                    <td class="muted" style="font-size:13px"
+                        th:text="${e.detail}" th:title="${e.userAgent}"></td>
+                </tr>
+
+                <tr th:if="${entries.isEmpty()}">
+                    <td colspan="6" class="muted" style="text-align:center;padding:30px">
+                        Записей по заданному фильтру нет.
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Фильтры протаскиваются через ссылки постраничной навигации, иначе вторая страница
+         показывала бы уже нефильтрованный список. -->
+    <div class="pager" th:if="${totalPages > 1}">
+        <a th:if="${page > 0}" class="btn btn-secondary btn-sm"
+           th:href="@{/admin/activity(username=${filterUsername}, type=${filterType},
+                      category=${filterCategory}, service=${filterService},
+                      onlyFailures=${filterOnlyFailures}, from=${filterFrom}, to=${filterTo},
+                      page=${page - 1})}">← Назад</a>
+
+        <span class="muted"
+              th:text="'страница ' + ${page + 1} + ' из ' + ${totalPages}">страница</span>
+
+        <a th:if="${page + 1 < totalPages}" class="btn btn-secondary btn-sm"
+           th:href="@{/admin/activity(username=${filterUsername}, type=${filterType},
+                      category=${filterCategory}, service=${filterService},
+                      onlyFailures=${filterOnlyFailures}, from=${filterFrom}, to=${filterTo},
+                      page=${page + 1})}">Вперёд →</a>
+    </div>
+</div>
+
+</body>
+</html>

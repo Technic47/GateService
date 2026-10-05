@@ -1,0 +1,91 @@
+server:
+  # Порт гейта. CLAUDE.md перечисляет занятые на VPS: 43615, 48157, 8443, 8080, 3000, 3001, 5432.
+  # 9000 из этого списка свободен — но перед деплоем всё равно проверьте `ss -tulnp`.
+  port: ${GATE_PORT:9000}
+  # Гейт не должен быть доступен из интернета: к нему ходит только Nginx с той же машины.
+  # В Docker переопределяется на 0.0.0.0, иначе порт не пробросится из контейнера.
+  address: ${GATE_BIND_ADDRESS:127.0.0.1}
+  # Гейт стоит за Nginx по http, а браузер ходит по https. Без этого Spring строит
+  # абсолютные редиректы (на /login, на сохранённый запрос) по схеме запроса от Nginx —
+  # то есть на http://144.31.187.7/..., где гейта нет. native доверяет X-Forwarded-Proto /
+  # X-Forwarded-For только от внутренних адресов (127.0.0.1 и частные сети).
+  forward-headers-strategy: ${GATE_FORWARD_HEADERS_STRATEGY:native}
+  servlet:
+    session:
+      cookie:
+        name: GATESESSION
+        http-only: true
+        # Куки не различают порты: cookie, выставленная гейтом на 144.31.187.7, уедет
+        # и на 144.31.187.7:8843. Именно это и делает схему работоспособной без домена.
+        same-site: lax
+        # true требует HTTPS. Для локальной отладки по http профиль dev ставит false.
+        secure: ${GATE_COOKIE_SECURE:true}
+        path: /
+
+spring:
+  application:
+    name: gate-service
+
+  datasource:
+    url: jdbc:postgresql://${GATE_DB_HOST:144.31.187.7}:${GATE_DB_PORT:5432}/${GATE_DB_NAME:gate}
+    username: ${GATE_DB_USER:gate}
+    password: ${GATE_DB_PASSWORD}
+    hikari:
+      # Пул маленький осознанно: 1 vCPU на VPS, десяток пользователей,
+      # а каждое соединение к Postgres стоит памяти на стороне сервера БД.
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 5000
+
+  jpa:
+    # Схемой владеет Flyway. validate ловит расхождение сущностей и миграций на старте.
+    hibernate:
+      ddl-auto: validate
+    # Ленивые коллекции должны догружаться явно, а не случайно при отрисовке шаблона.
+    open-in-view: false
+    properties:
+      hibernate:
+        # Диалект задан явно, хотя Spring Boot умеет определять его сам.
+        # Определяет он его, открывая соединение и читая метаданные JDBC, — и если БД
+        # недоступна, падает с «Unable to determine Dialect without JDBC metadata».
+        # Эта формулировка уводит от настоящей причины: не туда смотрит не Hibernate,
+        # а соединение вообще не установилось. С явным диалектом наверх всплывает
+        # нормальная ошибка подключения.
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+  thymeleaf:
+    cache: true
+
+gate:
+  # Ключ подписи remember-me. Обязателен и должен пережить перезапуск — задайте
+  # GATE_REMEMBER_ME_KEY длинной случайной строкой (openssl rand -base64 32).
+  remember-me-key: ${GATE_REMEMBER_ME_KEY}
+  admin:
+    username: ${GATE_ADMIN_USERNAME:admin}
+    # Пусто — при первом старте сгенерируется случайный и один раз напечатается в лог.
+    password: ${GATE_ADMIN_PASSWORD:}
+  seed-default-service: ${GATE_SEED_DEFAULT_SERVICE:true}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    root: INFO
+    com.technic.gate: INFO
+    # Журнал активности отдельной строкой в stdout — это то, что видно в docker logs и Dozzle.
+    gate.activity: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%logger{0}] %msg%n"

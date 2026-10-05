@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<!--
+  Общая страница ошибки. Намеренно без верхней панели: сюда можно попасть и неаутентифицированным,
+  а панель рисует имя пользователя и кнопку выхода.
+-->
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head('Ошибка')}"></head>
+<body>
+
+<div class="auth-wrap">
+    <div class="auth-card" style="text-align:center">
+        <div class="auth-logo">
+            <div class="mark">⚠️</div>
+            <h1 th:text="${status} ?: 'Ошибка'">Ошибка</h1>
+            <p th:text="${error}">Что-то пошло не так</p>
+        </div>
+
+        <p class="muted mono" style="font-size:12.5px" th:if="${path}" th:text="${path}"></p>
+
+        <div class="actions" style="justify-content:center">
+            <a class="btn btn-secondary" th:href="@{/portal}">На главную</a>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

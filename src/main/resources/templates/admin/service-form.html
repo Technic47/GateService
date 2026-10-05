@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head(${service} == null ? 'Новый сервис' : 'Сервис')}"></head>
+<body>
+
+<header th:replace="~{layout :: topbar}"></header>
+
+<div class="page page-narrow">
+    <div th:replace="~{layout :: flash}"></div>
+
+    <div class="page-head">
+        <h1 th:text="${service} == null ? 'Новый сервис' : 'Сервис ' + ${service.displayName}">
+            Сервис
+        </h1>
+        <p><a th:href="@{/admin/services}">← ко всем сервисам</a></p>
+    </div>
+
+    <div class="card">
+        <form th:action="@{/admin/services}" method="post">
+            <input type="hidden" name="id" th:if="${service != null}" th:value="${service.id}">
+
+            <div class="field">
+                <label for="name">Машинное имя</label>
+                <input type="text" id="name" name="name" required
+                       pattern="[a-z0-9][a-z0-9_\-]{1,63}"
+                       th:value="${service?.name}">
+                <div class="hint">
+                    Строчная латиница, цифры, дефис, подчёркивание. Ровно это значение Nginx
+                    передаёт в заголовке <span class="mono">X-Service-Name</span> — при
+                    расхождении гейт ответит 403 «неизвестный сервис».
+                </div>
+            </div>
+
+            <div class="field">
+                <label for="displayName">Отображаемое название</label>
+                <input type="text" id="displayName" name="displayName" required
+                       th:value="${service?.displayName}">
+                <div class="hint">Показывается пользователю на плитке в портале.</div>
+            </div>
+
+            <div class="field">
+                <label for="description">Описание</label>
+                <input type="text" id="description" name="description"
+                       th:value="${service?.description}">
+            </div>
+
+            <h3 style="margin-top:24px">Куда проксировать (upstream)</h3>
+
+            <div class="row">
+                <div class="field">
+                    <label for="scheme">Схема</label>
+                    <select id="scheme" name="scheme">
+                        <option value="http" th:selected="${service == null or service.scheme == 'http'}">http</option>
+                        <option value="https" th:selected="${service != null and service.scheme == 'https'}">https</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label for="host">Host</label>
+                    <input type="text" id="host" name="host" required
+                           th:value="${service != null} ? ${service.host} : '127.0.0.1'">
+                </div>
+
+                <div class="field">
+                    <label for="port">Порт</label>
+                    <input type="number" id="port" name="port" required min="1" max="65535"
+                           th:value="${service != null} ? ${service.port} : 8080">
+                </div>
+            </div>
+
+            <div class="hint" style="margin-top:-6px">
+                Адрес с точки зрения VPS. Для сервиса за reverse SSH-туннелем это локальный
+                конец туннеля — <span class="mono">https://127.0.0.1:8080</span>, а не адрес
+                домашнего сервера.
+            </div>
+
+            <h3 style="margin-top:24px">Куда отправлять браузер</h3>
+
+            <div class="field">
+                <label for="publicUrl">Публичный URL</label>
+                <input type="text" id="publicUrl" name="publicUrl"
+                       placeholder="https://144.31.187.7:8843"
+                       th:value="${service?.publicUrl}">
+                <div class="hint">
+                    Адрес, по которому сервис открывается снаружи — через Nginx с проверкой гейта.
+                    Именно сюда ведёт плитка в портале. Если оставить пустым, гейт подставит
+                    upstream, и переход не сработает.
+                </div>
+            </div>
+
+            <h3 style="margin-top:24px">Прочее</h3>
+
+            <div class="row">
+                <div class="field">
+                    <label for="icon">Иконка</label>
+                    <input type="text" id="icon" name="icon" maxlength="4" placeholder="🧩"
+                           th:value="${service?.icon}">
+                    <div class="hint">Один эмодзи.</div>
+                </div>
+
+                <div class="field">
+                    <label for="sortOrder">Порядок</label>
+                    <input type="number" id="sortOrder" name="sortOrder"
+                           th:value="${service != null} ? ${service.sortOrder} : 0">
+                    <div class="hint">Меньше — выше в списке.</div>
+                </div>
+            </div>
+
+            <div class="check">
+                <input type="checkbox" id="enabled" name="enabled" value="true"
+                       th:checked="${service == null or service.enabled}">
+                <label for="enabled">
+                    Сервис включён
+                    <div class="hint">
+                        Отключённый сервис исчезает из портала, и гейт отказывает по нему всем,
+                        включая администратора. Удобно, чтобы закрыть доступ на время работ,
+                        не теряя выданные доступы.
+                    </div>
+                </label>
+            </div>
+
+            <div class="actions">
+                <button type="submit" class="btn">Сохранить</button>
+                <a class="btn btn-secondary" th:href="@{/admin/services}">Отмена</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="alert alert-info" th:if="${service == null}">
+        После сохранения загляните в «Настройки гейта» — там лежит готовый блок конфига Nginx
+        с уже подставленным именем нового сервиса.
+    </div>
+
+</div>
+
+</body>
+</html>

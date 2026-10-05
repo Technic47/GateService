@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head(${user} == null ? 'Новый пользователь' : 'Пользователь')}"></head>
+<body>
+
+<header th:replace="~{layout :: topbar}"></header>
+
+<div class="page page-narrow">
+    <div th:replace="~{layout :: flash}"></div>
+
+    <div class="page-head">
+        <h1 th:text="${user} == null ? 'Новый пользователь' : 'Пользователь ' + ${user.username}">
+            Пользователь
+        </h1>
+        <p><a th:href="@{/admin/users}">← ко всем пользователям</a></p>
+    </div>
+
+    <div class="card">
+        <!-- Создание и правка отличаются только адресом и наличием полей логина/пароля. -->
+        <form th:action="${user} == null
+                          ? @{/admin/users}
+                          : @{/admin/users/{id}(id=${user.id})}" method="post">
+
+            <div class="field" th:if="${user} == null">
+                <label for="username">Логин</label>
+                <input type="text" id="username" name="username" required autofocus
+                       minlength="3" maxlength="64" pattern="[A-Za-z0-9._\-]{3,64}">
+                <div class="hint">3–64 символа: латиница, цифры, точка, дефис, подчёркивание.</div>
+            </div>
+
+            <div class="field" th:if="${user} == null">
+                <label for="password">Пароль</label>
+                <input type="password" id="password" name="password" required
+                       autocomplete="new-password">
+            </div>
+
+            <div class="field">
+                <label for="role">Роль</label>
+                <select id="role" name="role">
+                    <option th:each="r : ${roles}"
+                            th:value="${r}"
+                            th:text="${r} + (${r.name() == 'ADMIN'} ? ' — полный доступ к админке' : ' — только свои сервисы')"
+                            th:selected="${user != null and user.role == r}">USER</option>
+                </select>
+            </div>
+
+            <div class="check">
+                <input type="checkbox" id="approved" name="approved" value="true"
+                       th:checked="${user == null or user.approved}">
+                <label for="approved">
+                    Аккаунт одобрен
+                    <div class="hint">
+                        Неодобренный аккаунт существует, но войти под ним нельзя.
+                        Так выглядят регистрации в режиме «с одобрением».
+                    </div>
+                </label>
+            </div>
+
+            <h3 style="margin-top:22px">Доступ к сервисам</h3>
+
+            <p class="muted" th:if="${allServices.isEmpty()}">
+                Сервисов пока нет. <a th:href="@{/admin/services/new}">Добавить сервис</a>.
+            </p>
+
+            <div class="check" th:each="svc : ${allServices}">
+                <input type="checkbox" name="serviceIds"
+                       th:id="'svc-' + ${svc.id}" th:value="${svc.id}"
+                       th:checked="${user != null and user.services.contains(svc)}">
+                <label th:for="'svc-' + ${svc.id}">
+                    <span th:text="${svc.displayName}">Сервис</span>
+                    <span class="mono muted" th:text="' (' + ${svc.name} + ')'"></span>
+                    <span th:if="${!svc.enabled}" class="badge badge-warn">отключён</span>
+                </label>
+            </div>
+
+            <div class="alert alert-info" style="margin-top:14px"
+                 th:if="${user != null and user.admin}">
+                Администратор по умолчанию имеет доступ ко всем сервисам независимо от этих
+                галочек — это поведение отключается на странице настроек гейта.
+            </div>
+
+            <div class="actions">
+                <button type="submit" class="btn">Сохранить</button>
+                <a class="btn btn-secondary" th:href="@{/admin/users}">Отмена</a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Смена пароля отдельной формой: иначе поле пароля пришлось бы держать в форме правки
+         пустым и различать «не менять» и «поставить пустой». -->
+    <div class="card" th:if="${user != null}">
+        <h2>Сбросить пароль</h2>
+        <form th:action="@{/admin/users/{id}/password(id=${user.id})}" method="post">
+            <div class="field">
+                <label for="newPassword">Новый пароль</label>
+                <input type="password" id="newPassword" name="newPassword" required
+                       autocomplete="new-password">
+                <div class="hint">
+                    Сброс пароля снимает временную блокировку от неудачных попыток входа.
+                </div>
+            </div>
+            <button type="submit" class="btn btn-secondary">Сбросить пароль</button>
+        </form>
+    </div>
+
+</div>
+
+</body>
+</html>

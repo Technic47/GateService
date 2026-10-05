@@ -1,0 +1,35 @@
+# GraalVM native image — финальная сборка под деплой (ориентир по CLAUDE.md: ~90 МБ RAM,
+# старт ~0.1 с). Собирать только после того, как всё проверено в JVM-режиме: сборка native
+# занимает минуты и требует заметно больше памяти, чем есть на VPS.
+#
+# ВАЖНО: собирать на машине с 8+ ГБ RAM, не на самом VPS — native-image там не влезет.
+#   docker build -f Dockerfile.native -t gate-service:native .
+#
+# Перед первым native-деплоем проверьте связку Security + JPA + Postgres JDBC: возможны
+# edge-cases с reflection, невидимые в обычной JVM. Обращения к бинам из шаблонов
+# (${@fmt.dateTime(...)}) идут через SpEL-рефлексию и требуют особого внимания.
+
+FROM ghcr.io/graalvm/native-image-community:25 AS build
+WORKDIR /build
+
+RUN microdnf install -y maven || (curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz \
+    | tar -xz -C /opt && ln -s /opt/apache-maven-3.9.9/bin/mvn /usr/local/bin/mvn)
+
+COPY pom.xml .
+COPY src ./src
+RUN mvn -B -Pnative native:compile -DskipTests
+
+FROM debian:bookworm-slim
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -r -s /bin/false gate
+
+COPY --from=build /build/target/gate-service ./gate-service
+USER gate
+
+EXPOSE 9000
+ENV GATE_BIND_ADDRESS=0.0.0.0
+
+ENTRYPOINT ["./gate-service"]

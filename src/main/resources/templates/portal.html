@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head('Сервисы')}"></head>
+<body>
+
+<header th:replace="~{layout :: topbar}"></header>
+
+<div class="page">
+    <div th:replace="~{layout :: flash}"></div>
+
+    <div class="page-head">
+        <h1>Доступные сервисы</h1>
+        <p th:if="${!services.isEmpty()}">Выберите, куда перейти.</p>
+    </div>
+
+    <!-- Пустое состояние разное для админа и обычного пользователя: у первого это значит
+         «не добавлено ни одного сервиса», у второго — «доступ ещё не выдали». -->
+    <div th:if="${services.isEmpty()}" class="card">
+        <div class="empty">
+            <span class="mark">🚪</span>
+            <th:block th:if="${currentIsAdmin}">
+                <p>Пока не добавлено ни одного включённого сервиса.</p>
+                <a class="btn" th:href="@{/admin/services/new}">Добавить сервис</a>
+            </th:block>
+            <th:block th:unless="${currentIsAdmin}">
+                <p>Вам пока не выдан доступ ни к одному сервису.</p>
+                <p class="muted">Обратитесь к администратору.</p>
+            </th:block>
+        </div>
+    </div>
+
+    <div class="service-grid" th:unless="${services.isEmpty()}">
+        <a class="service-card"
+           th:each="service : ${services}"
+           th:href="@{/go/{name}(name=${service.name})}">
+            <div class="service-icon" th:text="${service.icon} ?: '🧩'">🧩</div>
+            <h2 th:text="${service.displayName}">Сервис</h2>
+            <p th:text="${service.description} ?: ${service.targetUrl()}">Описание</p>
+        </a>
+    </div>
+
+    <p class="muted" style="margin-top:24px;font-size:13px"
+       th:if="${currentIsAdmin and services.size() == 1}">
+        У обычного пользователя с одним доступным сервисом этот экран пропускается —
+        после входа он попадает прямо в сервис. Администратору список показывается всегда,
+        иначе до админки было бы не добраться.
+    </p>
+</div>
+
+</body>
+</html>

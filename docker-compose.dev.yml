@@ -1,0 +1,61 @@
+# Локальная БД для разработки.
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#
+# Зачем отдельная база, а не primary на VPS: pg_hba.conf там пускает только standby
+# (2.26.60.167) и только для репликации. Домашний IP динамический, и добавлять его
+# в pg_hba означало бы открыть аутентификацию Postgres в интернет и править конфиг
+# при каждой смене адреса. Для разработки это того не стоит.
+#
+# Если всё же нужно подключиться к настоящему primary — SSH-туннель, без правки pg_hba:
+#   ssh -L 5433:localhost:5432 user@144.31.187.7
+#   и GATE_DB_HOST=localhost GATE_DB_PORT=5433
+
+services:
+
+  postgres-dev:
+    # Та же мажорная версия, что и на VPS, — чтобы миграции проверялись на том же движке.
+    image: postgres:16
+    container_name: gate-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gate
+      POSTGRES_USER: gate
+      POSTGRES_PASSWORD: gatedev
+    ports:
+      # Только на localhost. Пароль здесь заведомо слабый — наружу этому светить нельзя.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - gate_pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gate -d gate"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Гейт в контейнере — весь стек локально, без установки чего-либо.
+  # Нужен не всегда: для отладки удобнее запускать приложение из IDE или через
+  # mvn spring-boot:run, а из этого файла поднимать только postgres-dev.
+  #
+  #   весь стек:    docker compose -f docker-compose.dev.yml up -d --build
+  #   только БД:    docker compose -f docker-compose.dev.yml up -d postgres-dev
+  gate-dev:
+    build: .
+    container_name: gate-service-dev
+    restart: unless-stopped
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      # Имя сервиса из этого compose, а НЕ localhost: внутри контейнера localhost —
+      # это сам контейнер, и Postgres там не живёт.
+      GATE_DB_HOST: postgres-dev
+      GATE_DB_PORT: 5432
+      GATE_BIND_ADDRESS: 0.0.0.0
+      GATE_PORT: 9000
+    ports:
+      - "127.0.0.1:9000:9000"
+
+volumes:
+  gate_pgdata_dev:

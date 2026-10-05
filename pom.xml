@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <!-- Стек из CLAUDE.md. 4.1.1 — последний патч ветки 4.1 на 15.09.2026.
+             Проверить, не вышел ли новее:
+               mvn versions:display-parent-updates -DallowMinorUpdates=false -DallowMajorUpdates=false
+             На 4.2 переходить пока нельзя: доступен только 4.2.0-M1, это milestone, не GA. -->
+        <version>4.1.1</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.technic</groupId>
+    <artifactId>gate-service</artifactId>
+    <version>0.1.0</version>
+    <name>gate-service</name>
+    <description>Auth gate для сервисов домашнего сервера</description>
+
+    <properties>
+        <java.version>25</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!--
+          Именно starter, а не голый org.flywaydb:flyway-core.
+          В Spring Boot 4 автоконфигурации разнесены по отдельным модулям
+          (spring-boot-flyway, spring-boot-thymeleaf и т.д.), и наличие flyway-core
+          на classpath само по себе больше НЕ включает FlywayAutoConfiguration:
+          миграции молча не выполняются, а приложение падает позже и невнятно —
+          на ddl-auto=validate с "missing table [activity_log]".
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <!-- Поддержка конкретной СУБД ставится отдельно, начиная с Flyway 10. -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!--
+          Сборка GraalVM native image: mvn -Pnative native:compile -DskipTests
+          Объявлено явно, а не в расчёте на профиль из spring-boot-starter-parent,
+          чтобы сборка не зависела от того, что именно определяет конкретная версия parent.
+        -->
+        <profile>
+            <id>native</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                        <configuration>
+                            <buildArgs>
+                                <!-- Внятный стектрейс важнее пары мегабайт: отлаживать
+                                     native-образ без него крайне неприятно. -->
+                                <buildArg>-H:+ReportExceptionStackTraces</buildArg>
+                            </buildArgs>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head('Доступ запрещён')}"></head>
+<body>
+
+<div class="auth-wrap">
+    <div class="auth-card" style="text-align:center">
+        <div class="auth-logo">
+            <div class="mark">⛔</div>
+            <h1>Доступ запрещён</h1>
+        </div>
+
+        <p class="muted" th:if="${serviceName}">
+            У вашей учётной записи нет доступа к сервису
+            <strong class="mono" th:text="${serviceName}">service</strong>.
+        </p>
+        <p class="muted" th:unless="${serviceName}">
+            У вашей учётной записи нет доступа к этому сервису.
+        </p>
+        <p class="muted">Запросить доступ можно у администратора.</p>
+
+        <div class="actions" style="justify-content:center">
+            <a class="btn btn-secondary" th:href="@{/portal}">К списку сервисов</a>
+            <form th:action="@{/logout}" method="post" class="inline-form">
+                <button type="submit" class="btn btn-secondary">Выйти</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

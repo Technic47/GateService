@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<!--
+  Переиспользуемые куски разметки.
+
+  Без thymeleaf-layout-dialect — он тянет Groovy и несовместим с GraalVM native-image
+  (см. CLAUDE.md). Штатных th:fragment/th:replace для такого объёма страниц хватает.
+
+  Сам файл как страница не рендерится, только как источник фрагментов.
+-->
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+
+<head th:fragment="head(title)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title} + ' · Gate Service'">Gate Service</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+</head>
+
+<body>
+
+<!-- Верхняя панель. Пункты админки видны только администратору. -->
+<header th:fragment="topbar" class="topbar">
+    <div class="topbar-inner">
+        <a class="brand" th:href="@{/portal}">🔐 Gate Service</a>
+
+        <nav class="nav">
+            <a th:href="@{/portal}"
+               th:classappend="${activePage == 'portal'} ? 'active'">Сервисы</a>
+
+            <th:block th:if="${currentIsAdmin}">
+                <a th:href="@{/admin/users}"
+                   th:classappend="${activePage == 'users'} ? 'active'">Пользователи</a>
+                <a th:href="@{/admin/services}"
+                   th:classappend="${activePage == 'services'} ? 'active'">Настройка сервисов</a>
+                <a th:href="@{/admin/activity}"
+                   th:classappend="${activePage == 'activity'} ? 'active'">Журнал</a>
+                <a th:href="@{/admin/setup}"
+                   th:classappend="${activePage == 'setup'} ? 'active'">Настройки гейта</a>
+            </th:block>
+        </nav>
+
+        <div class="topbar-user">
+            <span th:if="${currentIsAdmin}" class="badge badge-admin">админ</span>
+            <span th:text="${currentUsername}">user</span>
+            <form th:action="@{/logout}" method="post" class="inline-form">
+                <button type="submit" class="btn btn-secondary btn-sm">Выйти</button>
+            </form>
+        </div>
+    </div>
+</header>
+
+<!-- Флеш-сообщения после редиректа плюс баннер режима обслуживания. -->
+<div th:fragment="flash">
+    <div th:if="${maintenanceMode}" class="alert alert-warn">
+        Включён режим обслуживания: доступ к сервисам открыт только администраторам.
+    </div>
+    <div th:if="${errorMessage}" class="alert alert-error" th:text="${errorMessage}"></div>
+    <div th:if="${successMessage}" class="alert alert-success" th:text="${successMessage}"></div>
+</div>
+
+</body>
+</html>

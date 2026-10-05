@@ -1,0 +1,20 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Секреты окружения — ни один .env не должен попасть в репозиторий:
+# там лежат пароль к БД, ключ remember-me и пароль администратора.
+.env
+.env.*
+!.env.example
+
+*.log
+
+# Claude Code local settings
+.claude/settings.local.json
