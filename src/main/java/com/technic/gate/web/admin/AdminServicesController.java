@@ -75,11 +75,14 @@ public class AdminServicesController {
                        @RequestParam(defaultValue = "false") boolean enabled,
                        @RequestParam(required = false) String icon,
                        @RequestParam(defaultValue = "0") int sortOrder,
+                       @RequestParam(defaultValue = "false") boolean directEnabled,
+                       @RequestParam(required = false) String redirectUris,
+                       @RequestParam(required = false) String apiPrefix,
                        @AuthenticationPrincipal GateUserDetails actor,
                        RedirectAttributes redirectAttributes) {
 
         serviceCatalog.save(id, name, displayName, description, scheme, host, port, publicUrl,
-                enabled, icon, sortOrder, actor.getUsername());
+                enabled, icon, sortOrder, directEnabled, redirectUris, apiPrefix, actor.getUsername());
         redirectAttributes.addFlashAttribute("successMessage", "Сервис " + name + " сохранён");
         return "redirect:/admin/services";
     }

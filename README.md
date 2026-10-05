@@ -215,6 +215,18 @@ server {
 
 ---
 
+## Gate Auth: токены для приложений
+
+Гейт подписывает для приложений токены по общему стандарту (`../gate-auth`, спецификация —
+`docs/gate-auth-spec-v1.md`): `X-Gate-Assertion` на каждый разрешённый `/verify`, публичный ключ на
+`/.well-known/jwks.json`, вход из локальной сети через `/auth/handoff`. Ключ — `GATE_SIGNING_KEY`
+(см. `.env.example`); без него всё работает по-старому. Подробности и порядок выката — в `CLAUDE.md`,
+раздел «Gate Auth».
+
+Сборка теперь требует `gate-auth-core`: локально `mvn install` в `../gate-auth`, в Docker он собирается
+из дополнительного контекста (уже прописан в compose). `mvn test` поднимает PostgreSQL в Testcontainers —
+нужен локальный Docker.
+
 ## Два адреса у сервиса
 
 У сущности `ProtectedService` два адреса, и путать их — самая вероятная ошибка настройки:

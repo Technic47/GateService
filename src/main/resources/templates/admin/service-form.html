@@ -88,6 +88,47 @@
                 </div>
             </div>
 
+            <h3 style="margin-top:24px">Gate Auth</h3>
+            <p class="hint">
+                Для приложений на библиотеке <span class="mono">gate-auth</span>. Остальным сервисам
+                эти поля не нужны. Спецификация — <span class="mono">gate-auth/docs/gate-auth-spec-v1.md</span>.
+            </p>
+
+            <div class="field">
+                <label for="apiPrefix">Путь API</label>
+                <input type="text" id="apiPrefix" name="apiPrefix" placeholder="/api/"
+                       th:value="${service?.apiPrefix}">
+                <div class="hint">
+                    Для этого пути сгенерированный конфиг Nginx отвечает на 401/403 JSON-ом
+                    со ссылкой на вход, а не редиректом: <span class="mono">fetch</span> из SPA
+                    не умеет идти по редиректу на HTML-форму. Пусто — без отдельного блока.
+                </div>
+            </div>
+
+            <div class="check">
+                <input type="checkbox" id="directEnabled" name="directEnabled" value="true"
+                       th:checked="${service != null and service.directEnabled}">
+                <label for="directEnabled">
+                    Вход из локальной сети (direct mode)
+                    <div class="hint">
+                        Приложение, открытое по адресу в LAN, отправляет браузер на гейт за входом
+                        и дальше держит свою сессию. Нужен ключ подписи гейта (GATE_SIGNING_KEY_FILE).
+                    </div>
+                </label>
+            </div>
+
+            <div class="field">
+                <label for="redirectUris">Адреса возврата (callback)</label>
+                <textarea id="redirectUris" name="redirectUris" rows="3" class="mono"
+                          placeholder="https://192.168.1.50:8443/auth/callback"
+                          th:text="${service?.redirectUris}"></textarea>
+                <div class="hint">
+                    По одному на строку. Гейт отправит ответ только на адрес, совпадающий с одним
+                    из этих побайтово: без префиксов и шаблонов. Только https
+                    (http — лишь для localhost при отладке).
+                </div>
+            </div>
+
             <h3 style="margin-top:24px">Прочее</h3>
 
             <div class="row">

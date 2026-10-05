@@ -5,6 +5,8 @@ import com.technic.gate.domain.User;
 import com.technic.gate.security.GateUserDetails;
 import com.technic.gate.service.ServiceCatalogService;
 import com.technic.gate.service.UserAdminService;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -43,6 +45,7 @@ public class AdminUsersController {
     @GetMapping("/new")
     public String createForm(Model model) {
         model.addAttribute("user", null);
+        model.addAttribute("appRoles", Map.of());
         model.addAttribute("allServices", serviceCatalog.findAll());
         model.addAttribute("roles", Role.values());
         model.addAttribute("activePage", "users");
@@ -54,6 +57,7 @@ public class AdminUsersController {
         User user = userAdminService.require(id);
         model.addAttribute("user", user);
         model.addAttribute("grantedIds", user.getServices().stream().map(s -> s.getId()).toList());
+        model.addAttribute("appRoles", userAdminService.appRoles(id));
         model.addAttribute("allServices", serviceCatalog.findAll());
         model.addAttribute("roles", Role.values());
         model.addAttribute("activePage", "users");
@@ -66,10 +70,12 @@ public class AdminUsersController {
                          @RequestParam Role role,
                          @RequestParam(defaultValue = "false") boolean approved,
                          @RequestParam(required = false) Set<Long> serviceIds,
+                         @RequestParam Map<String, String> params,
                          @AuthenticationPrincipal GateUserDetails actor,
                          RedirectAttributes redirectAttributes) {
 
-        userAdminService.create(username, password, role, approved, serviceIds, actor.getUsername());
+        userAdminService.create(username, password, role, approved, serviceIds, appRoles(params),
+                actor.getUsername());
         redirectAttributes.addFlashAttribute("successMessage", "Пользователь " + username + " создан");
         return "redirect:/admin/users";
     }
@@ -79,10 +85,11 @@ public class AdminUsersController {
                          @RequestParam Role role,
                          @RequestParam(defaultValue = "false") boolean approved,
                          @RequestParam(required = false) Set<Long> serviceIds,
+                         @RequestParam Map<String, String> params,
                          @AuthenticationPrincipal GateUserDetails actor,
                          RedirectAttributes redirectAttributes) {
 
-        userAdminService.update(id, role, approved, serviceIds, actor.getUsername());
+        userAdminService.update(id, role, approved, serviceIds, appRoles(params), actor.getUsername());
         redirectAttributes.addFlashAttribute("successMessage", "Изменения сохранены");
         return "redirect:/admin/users";
     }
@@ -95,11 +102,27 @@ public class AdminUsersController {
                                RedirectAttributes redirectAttributes) {
 
         User user = userAdminService.require(id);
-        userAdminService.update(id, user.getRole(), user.isApproved(), serviceIds,
+        // Роли в приложениях не трогаем (null): в списке есть только чекбоксы доступа.
+        userAdminService.update(id, user.getRole(), user.isApproved(), serviceIds, null,
                 actor.getUsername());
         redirectAttributes.addFlashAttribute("successMessage",
                 "Доступы пользователя " + user.getUsername() + " обновлены");
         return "redirect:/admin/users";
+    }
+
+    /** Поля формы appRole_<id сервиса> → карта id сервиса → роль. */
+    private static Map<Long, String> appRoles(Map<String, String> params) {
+        Map<Long, String> roles = new HashMap<>();
+        params.forEach((name, value) -> {
+            if (name.startsWith("appRole_")) {
+                try {
+                    roles.put(Long.parseLong(name.substring("appRole_".length())), value);
+                } catch (NumberFormatException ignored) {
+                    // чужое поле — пропускаем
+                }
+            }
+        });
+        return roles;
     }
 
     @PostMapping("/{id}/block")

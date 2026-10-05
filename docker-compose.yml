@@ -4,7 +4,12 @@
 services:
 
   gate:
-    build: .
+    build:
+      context: .
+      # gate-auth-core собирается из соседнего проекта (не опубликован в Central) — см. Dockerfile.
+      # При деплое через docker context vps-germany этот каталог тоже уезжает с рабочей машины.
+      additional_contexts:
+        gateauth: ../gate-auth
     container_name: gate-service
     restart: unless-stopped
     env_file: .env

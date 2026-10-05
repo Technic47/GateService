@@ -55,28 +55,28 @@ public class NginxConfigGenerator {
             sb.append("        proxy_set_header X-Forwarded-For $remote_addr;\n");
             sb.append("    }\n\n");
 
+            String apiPrefix = service.getApiPrefix();
+            if (apiPrefix != null && !apiPrefix.isBlank()) {
+                sb.append("    # API (Gate Auth, §5.2): 401/403 — JSON, а не редирект. fetch из SPA пошёл бы\n");
+                sb.append("    # по редиректу и получил HTML формы входа; по login_url SPA уводит на вход сама.\n");
+                sb.append("    location ").append(apiPrefix).append(" {\n");
+                sb.append("        auth_request /_gate_verify;\n");
+                appendIdentityHeaders(sb);
+                sb.append("        error_page 401 = @gate_api_401;\n");
+                sb.append("        error_page 403 = @gate_api_403;\n\n");
+                appendProxy(sb, service);
+                sb.append("    }\n\n");
+            }
+
             sb.append("    location / {\n");
-            sb.append("        auth_request /_gate_verify;\n\n");
-            sb.append("        # Имя пользователя можно передать дальше в сервис.\n");
-            sb.append("        auth_request_set $gate_user $upstream_http_x_gate_user;\n");
-            sb.append("        proxy_set_header X-Gate-User $gate_user;\n\n");
+            sb.append("        auth_request /_gate_verify;\n");
+            appendIdentityHeaders(sb);
             sb.append("        # 401 — не вошёл: отправляем на форму логина с возвратом назад.\n");
             sb.append("        error_page 401 = @gate_login;\n");
             sb.append("        # 403 — вошёл, но доступа нет: показываем страницу отказа гейта.\n");
             sb.append("        error_page 403 = @gate_denied;\n\n");
-            sb.append("        proxy_pass ").append(service.upstreamUrl()).append(";\n");
-            sb.append("        proxy_set_header Host $host;\n");
-            sb.append("        proxy_set_header X-Real-IP $remote_addr;\n");
-            sb.append("        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n");
-            sb.append("        proxy_set_header X-Forwarded-Proto $scheme;\n");
-            if ("https".equals(service.getScheme())) {
-                sb.append("        # У домашнего Nginx самоподписанный сертификат.\n");
-                sb.append("        proxy_ssl_verify off;\n");
-            }
-            sb.append("        proxy_http_version 1.1;\n");
-            sb.append("        proxy_set_header Upgrade $http_upgrade;\n");
-            sb.append("        proxy_set_header Connection \"upgrade\";\n");
-            sb.append("        proxy_read_timeout 300s;\n\n");
+            appendProxy(sb, service);
+            sb.append("\n");
             appendLogoutButton(sb, loginUrl);
             sb.append("    }\n\n");
 
@@ -88,11 +88,52 @@ public class NginxConfigGenerator {
             sb.append("        return 302 ").append(loginUrl)
                     .append("/denied?service=").append(service.getName()).append(";\n");
             sb.append("    }\n");
+            if (apiPrefix != null && !apiPrefix.isBlank()) {
+                sb.append("\n    location @gate_api_401 {\n");
+                sb.append("        default_type application/problem+json;\n");
+                sb.append("        return 401 '{\"type\":\"about:blank\",\"title\":\"Unauthorized\",\"status\":401,")
+                        .append("\"login_url\":\"").append(loginUrl).append("/login\"}';\n");
+                sb.append("    }\n");
+                sb.append("    location @gate_api_403 {\n");
+                sb.append("        default_type application/problem+json;\n");
+                sb.append("        return 403 '{\"type\":\"about:blank\",\"title\":\"Forbidden\",\"status\":403}';\n");
+                sb.append("    }\n");
+            }
             sb.append("}\n\n");
         }
 
         sb.append("# После правки: nginx -t && systemctl reload nginx\n");
         return sb.toString();
+    }
+
+    /**
+     * Кто пользователь — для приложения.
+     *
+     * X-Gate-Assertion — подписанный токен Gate Auth (§5.2): proxy_set_header всегда
+     * перезаписывает заголовок, так что прислать свой клиент не может. X-Gate-User — по-старому,
+     * для сервисов без библиотеки gate-auth; доверять ему можно только за этим Nginx.
+     */
+    private static void appendIdentityHeaders(StringBuilder sb) {
+        sb.append("        auth_request_set $gate_user $upstream_http_x_gate_user;\n");
+        sb.append("        auth_request_set $gate_assertion $upstream_http_x_gate_assertion;\n");
+        sb.append("        proxy_set_header X-Gate-User $gate_user;\n");
+        sb.append("        proxy_set_header X-Gate-Assertion $gate_assertion;\n\n");
+    }
+
+    private static void appendProxy(StringBuilder sb, ProtectedService service) {
+        sb.append("        proxy_pass ").append(service.upstreamUrl()).append(";\n");
+        sb.append("        proxy_set_header Host $host;\n");
+        sb.append("        proxy_set_header X-Real-IP $remote_addr;\n");
+        sb.append("        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n");
+        sb.append("        proxy_set_header X-Forwarded-Proto $scheme;\n");
+        if ("https".equals(service.getScheme())) {
+            sb.append("        # У домашнего Nginx самоподписанный сертификат.\n");
+            sb.append("        proxy_ssl_verify off;\n");
+        }
+        sb.append("        proxy_http_version 1.1;\n");
+        sb.append("        proxy_set_header Upgrade $http_upgrade;\n");
+        sb.append("        proxy_set_header Connection \"upgrade\";\n");
+        sb.append("        proxy_read_timeout 300s;\n");
     }
 
     /**

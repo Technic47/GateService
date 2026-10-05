@@ -16,6 +16,10 @@ public enum ActivityType {
     VERIFY_ALLOWED(Category.ACCESS),
     VERIFY_DENIED(Category.ACCESS),
     SERVICE_OPENED(Category.ACCESS),
+    /** Gate Auth direct mode: выдан токен handoff для входа в приложение из LAN. */
+    HANDOFF_ISSUED(Category.ACCESS),
+    /** Gate Auth direct mode: в handoff отказано (нет доступа, неверный запрос). */
+    HANDOFF_DENIED(Category.ACCESS),
 
     USER_CREATED(Category.ADMIN),
     USER_UPDATED(Category.ADMIN),

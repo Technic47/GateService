@@ -71,6 +71,14 @@ gate:
     # Пусто — при первом старте сгенерируется случайный и один раз напечатается в лог.
     password: ${GATE_ADMIN_PASSWORD:}
   seed-default-service: ${GATE_SEED_DEFAULT_SERVICE:true}
+  # Gate Auth v1 (../gate-auth/docs/gate-auth-spec-v1.md): подпись токенов для приложений.
+  # Без ключа гейт работает как раньше: без X-Gate-Assertion и без /auth/handoff.
+  auth:
+    # Приватный JWK Ed25519 одной строкой (KeyTool из gate-auth-core) — или путь к файлу с ним.
+    signing-key: ${GATE_SIGNING_KEY:}
+    signing-key-file: ${GATE_SIGNING_KEY_FILE:}
+    # Claim iss. Приложения сверяют его с gate.auth.issuer у себя (по умолчанию тоже "gate").
+    issuer: ${GATE_AUTH_ISSUER:gate}
 
 management:
   endpoints:

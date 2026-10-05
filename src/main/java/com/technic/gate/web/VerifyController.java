@@ -4,6 +4,7 @@ import com.technic.gate.domain.ActivityType;
 import com.technic.gate.service.AccessVerifier;
 import com.technic.gate.service.ActivityService;
 import com.technic.gate.service.GateSettingsService;
+import com.technic.gate.service.GateTokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,16 +27,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class VerifyController {
 
+    /** Заголовок Gate Auth с подписанным утверждением (§5 спецификации). */
+    public static final String ASSERTION_HEADER = "X-Gate-Assertion";
+
     private final AccessVerifier accessVerifier;
     private final ActivityService activityService;
     private final GateSettingsService settingsService;
+    private final GateTokenService tokenService;
 
     public VerifyController(AccessVerifier accessVerifier,
                             ActivityService activityService,
-                            GateSettingsService settingsService) {
+                            GateSettingsService settingsService,
+                            GateTokenService tokenService) {
         this.accessVerifier = accessVerifier;
         this.activityService = activityService;
         this.settingsService = settingsService;
+        this.tokenService = tokenService;
     }
 
     @RequestMapping("/verify")
@@ -65,10 +72,16 @@ public class VerifyController {
                         .detail(originalUri(request))
                         .save();
             }
-            return ResponseEntity.ok()
+            ResponseEntity.BodyBuilder ok = ResponseEntity.ok()
                     .header("X-Gate-User", decision.user().getUsername())
-                    .header("X-Gate-Role", decision.user().getRole().name())
-                    .build();
+                    .header("X-Gate-Role", decision.user().getRole().name());
+            if (tokenService.enabled()) {
+                // Gate Auth, edge mode: подписанное утверждение для приложения. Nginx передаёт его
+                // дальше через auth_request_set + proxy_set_header X-Gate-Assertion.
+                // X-Gate-User/X-Gate-Role остаются для сервисов, ещё не перешедших на gate-auth.
+                ok.header(ASSERTION_HEADER, tokenService.assertion(decision.user(), decision.service(), request));
+            }
+            return ok.build();
         }
 
         activityService.event(ActivityType.VERIFY_DENIED)

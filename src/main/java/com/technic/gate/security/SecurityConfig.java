@@ -63,6 +63,10 @@ public class SecurityConfig {
                         // Эндпоинт для auth_request: свой ответ 200/401/403, без редиректа на логин.
                         .requestMatchers("/verify").permitAll()
                         .requestMatchers("/login", "/register", "/denied", "/error").permitAll()
+                        // Gate Auth: публичные ключи и вход из LAN. /auth/handoff сам решает,
+                        // что делать без сессии: при prompt=none — ответить login_required
+                        // приложению, а не показывать форму входа.
+                        .requestMatchers("/.well-known/jwks.json", "/auth/handoff").permitAll()
                         .requestMatchers("/css/**", "/js/**", "/favicon.ico").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/actuator/**").hasRole("ADMIN")

@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.util.List;
 
 /**
  * Защищаемый гейтом сервис.
@@ -60,6 +61,21 @@ public class ProtectedService {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder = 0;
 
+    /** Gate Auth, direct mode: разрешён ли вход из LAN через /auth/handoff. */
+    @Column(name = "direct_enabled", nullable = false)
+    private boolean directEnabled = false;
+
+    /**
+     * Gate Auth, direct mode: адреса callback-ов приложения, по одному на строку.
+     * Гейт отправляет ответ handoff только на адрес, побайтово совпадающий с одним из них.
+     */
+    @Column(name = "redirect_uris", length = 2048)
+    private String redirectUris;
+
+    /** Путь API приложения (например /api/): Nginx отвечает на него JSON-ом 401/403, а не редиректом. */
+    @Column(name = "api_prefix", length = 128)
+    private String apiPrefix;
+
     protected ProtectedService() {
     }
 
@@ -78,6 +94,19 @@ public class ProtectedService {
     /** Куда вести браузер. Если публичный URL не задан — падаем на upstream. */
     public String targetUrl() {
         return (publicUrl != null && !publicUrl.isBlank()) ? publicUrl : upstreamUrl();
+    }
+
+    /** Зарегистрированные callback-и direct mode, без пустых строк. */
+    public List<String> redirectUriList() {
+        if (redirectUris == null || redirectUris.isBlank()) {
+            return List.of();
+        }
+        return redirectUris.lines().map(String::trim).filter(l -> !l.isEmpty()).toList();
+    }
+
+    /** Точное совпадение — никаких префиксов и нормализации (§6.1 спецификации). */
+    public boolean isRegisteredRedirectUri(String candidate) {
+        return candidate != null && redirectUriList().contains(candidate);
     }
 
     public Long getId() { return id; }
@@ -111,6 +140,15 @@ public class ProtectedService {
 
     public int getSortOrder() { return sortOrder; }
     public void setSortOrder(int sortOrder) { this.sortOrder = sortOrder; }
+
+    public boolean isDirectEnabled() { return directEnabled; }
+    public void setDirectEnabled(boolean directEnabled) { this.directEnabled = directEnabled; }
+
+    public String getRedirectUris() { return redirectUris; }
+    public void setRedirectUris(String redirectUris) { this.redirectUris = redirectUris; }
+
+    public String getApiPrefix() { return apiPrefix; }
+    public void setApiPrefix(String apiPrefix) { this.apiPrefix = apiPrefix; }
 
     /**
      * Равенство по идентификатору, а не по ссылке.

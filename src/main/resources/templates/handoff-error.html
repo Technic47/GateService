@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head('Вход не выполнен')}"></head>
+<body>
+
+<div class="auth-wrap">
+    <div class="auth-card" style="text-align:center">
+        <div class="auth-logo">
+            <div class="mark">⚠️</div>
+            <h1>Вход не выполнен</h1>
+        </div>
+
+        <p class="muted" th:text="${message}">Неверный запрос на вход.</p>
+        <p class="muted">Вернитесь в приложение и попробуйте ещё раз. Если ошибка повторяется —
+            сообщите администратору.</p>
+
+        <div class="actions" style="justify-content:center">
+            <a class="btn btn-secondary" th:href="@{/portal}">К списку сервисов</a>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

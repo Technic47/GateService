@@ -40,7 +40,10 @@ services:
   #   весь стек:    docker compose -f docker-compose.dev.yml up -d --build
   #   только БД:    docker compose -f docker-compose.dev.yml up -d postgres-dev
   gate-dev:
-    build: .
+    build:
+      context: .
+      additional_contexts:
+        gateauth: ../gate-auth
     container_name: gate-service-dev
     restart: unless-stopped
     depends_on:

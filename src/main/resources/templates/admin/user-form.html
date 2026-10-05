@@ -71,6 +71,17 @@
                     <span class="mono muted" th:text="' (' + ${svc.name} + ')'"></span>
                     <span th:if="${!svc.enabled}" class="badge badge-warn">отключён</span>
                 </label>
+                <input type="text" class="mono" style="width:9em;margin-left:auto"
+                       th:name="'appRole_' + ${svc.id}"
+                       th:value="${appRoles[svc.id]}"
+                       placeholder="роль" maxlength="32" pattern="[a-z][a-z0-9_\-]{0,31}"
+                       title="Роль в приложении (Gate Auth), например admin. Пусто — без роли.">
+            </div>
+
+            <div class="hint" th:unless="${allServices.isEmpty()}">
+                Поле справа — роль пользователя внутри приложения (claim <span class="mono">roles</span>
+                в токене Gate Auth), например <span class="mono">admin</span>. Работает только при выданном
+                доступе; пусто — без роли. Сервисам без библиотеки gate-auth не нужна.
             </div>
 
             <div class="alert alert-info" style="margin-top:14px"
