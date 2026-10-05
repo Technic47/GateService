@@ -15,14 +15,6 @@ WORKDIR /build
 RUN microdnf install -y maven || (curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz \
     | tar -xz -C /opt && ln -s /opt/apache-maven-3.9.9/bin/mvn /usr/local/bin/mvn)
 
-# gate-auth-core из соседнего проекта — см. комментарий в Dockerfile:
-#   docker build --build-context gateauth=../gate-auth -f Dockerfile.native -t gate-service:native .
-COPY --from=gateauth pom.xml /gate-auth/pom.xml
-COPY --from=gateauth gate-auth-core/pom.xml /gate-auth/gate-auth-core/pom.xml
-COPY --from=gateauth gate-auth-core/src /gate-auth/gate-auth-core/src
-COPY --from=gateauth gate-auth-spring-boot-starter/pom.xml /gate-auth/gate-auth-spring-boot-starter/pom.xml
-RUN mvn -B -q -f /gate-auth/pom.xml -pl gate-auth-core -am install -DskipTests
-
 COPY pom.xml .
 COPY src ./src
 RUN mvn -B -Pnative native:compile -DskipTests

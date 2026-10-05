@@ -24,9 +24,8 @@
     <properties>
         <java.version>25</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Общий стандарт авторизации (../gate-auth). Пока не опубликован в Maven Central:
-             локально — mvn install в ../gate-auth, в Docker — собирается из additional context
-             (см. Dockerfile и docker-compose.yml). -->
+        <!-- Общий стандарт авторизации (../gate-auth), из Maven Central:
+             io.github.technic47.gateauth:gate-auth-core. -->
         <gate-auth.version>0.1.0</gate-auth.version>
     </properties>
 

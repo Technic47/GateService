@@ -223,9 +223,8 @@ server {
 (см. `.env.example`); без него всё работает по-старому. Подробности и порядок выката — в `CLAUDE.md`,
 раздел «Gate Auth».
 
-Сборка теперь требует `gate-auth-core`: локально `mvn install` в `../gate-auth`, в Docker он собирается
-из дополнительного контекста (уже прописан в compose). `mvn test` поднимает PostgreSQL в Testcontainers —
-нужен локальный Docker.
+Зависимость `gate-auth-core` берётся из Maven Central. `mvn test` поднимает PostgreSQL в Testcontainers —
+нужен локальный Docker (не текущий docker context `vps-germany`!).
 
 ## Два адреса у сервиса
 

@@ -4,18 +4,6 @@
 FROM maven:3.9-eclipse-temurin-25 AS build
 WORKDIR /build
 
-# gate-auth-core (соседний проект ../gate-auth) пока не опубликован в Maven Central:
-# собираем его здесь же из дополнительного контекста сборки "gateauth".
-#   compose:      build.additional_contexts.gateauth: ../gate-auth   (уже прописано)
-#   docker build: docker build --build-context gateauth=../gate-auth .
-# Pom стартера нужен только чтобы Maven прочитал reactor; сам стартер не собирается.
-# После публикации в Central этот блок удалить.
-COPY --from=gateauth pom.xml /gate-auth/pom.xml
-COPY --from=gateauth gate-auth-core/pom.xml /gate-auth/gate-auth-core/pom.xml
-COPY --from=gateauth gate-auth-core/src /gate-auth/gate-auth-core/src
-COPY --from=gateauth gate-auth-spring-boot-starter/pom.xml /gate-auth/gate-auth-spring-boot-starter/pom.xml
-RUN mvn -B -q -f /gate-auth/pom.xml -pl gate-auth-core -am install -DskipTests
-
 # Зависимости отдельным слоем: правка исходников не заставляет заново тянуть весь репозиторий.
 COPY pom.xml .
 RUN mvn -B dependency:go-offline

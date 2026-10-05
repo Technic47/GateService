@@ -263,19 +263,14 @@ GET       /actuator/health           без аутентификации; ост
 **Без ключа гейт работает как раньше** — без токенов и без `/auth/handoff`. Ключ задан, но не читается —
 гейт не стартует (молчаливый запуск без подписи сломал бы вход во все приложения).
 
-⚠️ `gate-auth-core` пока не в Maven Central:
-- локально: сначала `mvn install` в `../gate-auth`;
-- Docker: `Dockerfile` собирает его из дополнительного контекста `gateauth` (`../gate-auth`), он прописан в обоих
-  compose-файлах. Голый `docker build` — с `--build-context gateauth=../gate-auth`. При деплое через
-  `docker context vps-germany` каталог `../gate-auth` тоже уезжает с рабочей машины.
-  После публикации в Central этот блок из Dockerfile-ов убрать.
+`gate-auth-core` берётся из Maven Central (`io.github.technic47.gateauth`), как обычная зависимость.
 
 Тесты: `GateAuthIntegrationTest` поднимает **PostgreSQL 16 через Testcontainers** — для `mvn test` нужен
 локальный Docker. Контейнер стартует в текущем docker context: перед тестами проверить, что это
 `desktop-linux`, а не `vps-germany`.
 
 Порядок выката:
-1. `mvn install` в `../gate-auth`; сгенерировать ключ, положить приватный JWK в `GATE_SIGNING_KEY` в `.env`.
+1. Сгенерировать ключ (KeyTool из gate-auth-core), положить приватный JWK в `GATE_SIGNING_KEY` в локальный `.env`.
 2. Деплой гейта (миграция V2 применится сама). Старые сервисы ничего не заметят.
 3. Для приложения на gate-auth: завести сервис (путь API, при необходимости — вход из LAN и адрес возврата),
    выдать доступ и роли, перегенерировать блок Nginx на странице настроек, `nginx -t && systemctl reload nginx`.
