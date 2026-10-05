@@ -13,19 +13,26 @@
 
 **Сервис развёрнут на primary VPS и работает (15.09.2026).** JVM-образ в Docker, `network_mode: host`. Вход — `https://144.31.187.7`, FashionMark — `https://144.31.187.7:8843` за `auth_request`. Basic Auth в Nginx снят. `mvn clean package` проходит на Java 25 + Spring Boot 4.1.1. Реализовано всё из раздела "Что должен делать gate-service" плюс журнал активности и страница настроек гейта.
 
+**Версия 0.2.0 (Gate Auth) развёрнута на VPS 05.10.2026.** Миграция V2 применена, ключ подписи загружен
+(`kid=KENl1RAjjHUDtdGm`), `https://144.31.187.7/.well-known/jwks.json` отдаёт публичный ключ. FashionMark работает
+по-старому (заголовок `X-Gate-User`, без библиотеки gate-auth). Репозиторий: `github.com/Technic47/GateService`.
+
 Что сделано:
-- Сущности, Flyway-миграция `V1__init.sql`, репозитории
+- Сущности, Flyway-миграции `V1__init.sql`, `V2__common_auth.sql`, репозитории
 - Регистрация/логин (bcrypt), роли ADMIN/USER, блокировка, лок по неудачным попыткам
 - `/verify` для Nginx `auth_request`
 - Портал выбора сервиса (при единственном доступном сервисе экран пропускается)
 - Админка: пользователи, сервисы, журнал активности, настройки гейта
 - Docker-сборка (JVM и native), docker-compose с Dozzle
+- Gate Auth v1 (0.2.0): подписанные токены для приложений, JWKS, вход из LAN, роли в приложениях — раздел «Gate Auth»
 
 **Запускался и проверен на живой БД** (локальный PostgreSQL 16 в Docker, профиль `dev`): Flyway применяет миграцию, `ddl-auto=validate` проходит, все страницы отдают 200, вход/выход и CSRF работают, `/verify` отвечает 200/401/403 по делу, пользователь с одним сервисом редиректится прямо в него, USER на `/admin/**` получает 403, события пишутся в журнал.
 
 Чего ещё нет:
 - Native-образ не собирался (на VPS крутится JVM-вариант)
-- Тесты есть только на проверку адресов редиректа (`RedirectTargetsTest`)
+- Тесты: `RedirectTargetsTest`, токены Gate Auth, валидация настроек сервиса и генератор Nginx, интеграционный
+  `GateAuthIntegrationTest` на PostgreSQL 16 (Testcontainers). Не покрыты: вход/выход формой, `AccessVerifier`
+  отдельно, защита последнего ADMIN
 - Генератор конфига Nginx не выдаёт `server`-блок для самого гейта (443) — он написан руками, см. "Интеграция с Nginx"
 
 Подробности по сборке, переменным окружения и деплою — в `README.md`.
@@ -145,7 +152,7 @@ GATE_DB_HOST=localhost GATE_DB_PORT=5433 mvn spring-boot:run -Dspring-boot.run.p
 
 ## Модель данных (реализовано)
 
-Схема создаётся Flyway (`src/main/resources/db/migration/V1__init.sql`), `ddl-auto=validate` — расхождение сущностей и миграции ловится на старте.
+Схема создаётся Flyway (`src/main/resources/db/migration/V1__init.sql`, `V2__common_auth.sql`), `ddl-auto=validate` — расхождение сущностей и миграции ловится на старте.
 
 ```java
 User                      // таблица users
@@ -161,6 +168,12 @@ ProtectedService          // таблица services
   - id, name (unique), displayName, description, icon, sortOrder, enabled
   - scheme, host, port    // UPSTREAM: куда проксирует Nginx после разрешения
   - publicUrl             // КУДА ВЕСТИ БРАУЗЕР после логина
+  - apiPrefix             // Gate Auth: путь API, для него Nginx отвечает 401/403 JSON-ом (V2)
+  - directEnabled         // Gate Auth: разрешён вход из LAN через /auth/handoff (V2)
+  - redirectUris          // Gate Auth: callback-и приложения, по строке; сравнение побайтовое (V2)
+
+UserServiceRole           // таблица user_service_role (V2), PK (user_id, service_id)
+  - role                  // роль пользователя ВНУТРИ приложения → claim "roles" токена
 
 ActivityLog               // таблица activity_log
   - id, occurred_at, username (строкой!), userId, type, category
@@ -178,6 +191,11 @@ GateSetting               // таблица gate_settings, плоский key/va
 - **`activity_log.username` — строка без FK на users.** Журнал должен пережить удаление пользователя и фиксировать попытки входа под несуществующим логином. `user_id` — подсказка для ссылок, может указывать в никуда.
 - **Колонки `occurred_at`, `setting_key`, `setting_value`** названы так, чтобы не спорить с ключевыми словами SQL (`at`, `key`, `value`).
 - **Уникальность username/name — через `CREATE UNIQUE INDEX ... (lower(...))`**, а не `UNIQUE(...)`: обычный constraint пропустил бы пару `Admin`/`admin`.
+- **Роль в приложении — отдельная таблица `user_service_role`, а не колонка в `user_service_access`.** Та
+  таблица замаплена как `@ManyToMany`, Hibernate вправе пересоздать её строки и потерять лишнюю колонку.
+  Роль живёт, пока выдан доступ: при отзыве доступа `UserAdminService` удаляет и её.
+- **Откат на 0.1.0 возможен без восстановления БД:** V2 только добавляет, а Flyway по умолчанию игнорирует
+  применённую миграцию новее известных ему (проверено 05.10.2026).
 - **`open-in-view: false`.** Ленивые коллекции догружаются явно через `@EntityGraph` — не убирать его из методов репозитория, иначе шаблоны упадут на `LazyInitializationException`.
 
 ## Эндпоинты (реализовано)
@@ -232,7 +250,7 @@ GET       /actuator/health           без аутентификации; ост
 - **ADMIN по умолчанию проходит во все сервисы** (настройка `adminBypassesAccess`), иначе пришлось бы выдавать доступ самому себе в каждый новый сервис.
 - **Имя сервиса не передано — отказ.** Почти всегда это значит, что в Nginx забыли `proxy_set_header X-Service-Name`. Гейт отвечает 403 с явной причиной, а не пропускает запрос.
 
-## Gate Auth — общий стандарт авторизации приложений (ветка `common_auth`)
+## Gate Auth — общий стандарт авторизации приложений (с версии 0.2.0)
 
 Гейт выдаёт приложениям подписанные токены по стандарту **Gate Auth v1**. Спецификация и библиотека —
 в соседнем проекте `../gate-auth` (`docs/gate-auth-spec-v1.md` — нормативная). Гейт использует только
@@ -266,8 +284,14 @@ GET       /actuator/health           без аутентификации; ост
 `gate-auth-core` берётся из Maven Central (`io.github.technic47.gateauth`), как обычная зависимость.
 
 Тесты: `GateAuthIntegrationTest` поднимает **PostgreSQL 16 через Testcontainers** — для `mvn test` нужен
-локальный Docker. Контейнер стартует в текущем docker context: перед тестами проверить, что это
-`desktop-linux`, а не `vps-germany`.
+локальный Docker. ⚠️ Активный docker context обычно `vps-germany` (для деплоя). Тесты запускать с явным локальным
+Docker: `DOCKER_HOST=npipe:////./pipe/dockerDesktopLinuxEngine mvn test` (Git Bash) — иначе контейнеры могут
+уехать на VPS.
+
+Ключ: приватный JWK лежит в локальном `.env` (`GATE_SIGNING_KEY='{…}'` — **в одинарных кавычках**, иначе compose
+съест двойные кавычки JSON) и в менеджере паролей. Публичный ключ (PEM) — у приложений. Сменить ключ = обновить
+публичный ключ во всех приложениях (порядок ротации — §3 спецификации). Смена ключа в `.env` применяется
+`docker compose up -d --force-recreate gate`.
 
 Порядок выката:
 1. Сгенерировать ключ (KeyTool из gate-auth-core), положить приватный JWK в `GATE_SIGNING_KEY` в локальный `.env`.
@@ -280,14 +304,16 @@ GET       /actuator/health           без аутентификации; ост
 
 ```
 com.technic.gate
-├── domain/    User, ProtectedService, ActivityLog, GateSetting, Role, ActivityType, RegistrationMode
+├── domain/    User, ProtectedService, UserServiceRole, ActivityLog, GateSetting, Role, ActivityType, RegistrationMode
 ├── repo/      Spring Data репозитории
 ├── security/  SecurityConfig, GateUserDetails(Service), обработчики входа/выхода, LoginAttemptService,
 │              RedirectTargets (проверка адресов редиректа)
 ├── service/   AccessVerifier (решение о доступе), ActivityService + ActivityWriter (журнал),
 │              UserAdminService, ServiceCatalogService, GateSettingsService,
-│              HealthProbe, NginxConfigGenerator, DatabaseStatusService
-├── web/       AuthController, PortalController, VerifyController, GlobalModelAdvice, Formatter
+│              HealthProbe, NginxConfigGenerator, DatabaseStatusService,
+│              GateTokenService (Gate Auth: ключ, подпись assertion/handoff, кеш, JWKS)
+├── web/       AuthController, PortalController, VerifyController, GlobalModelAdvice, Formatter,
+│              HandoffController (/auth/handoff), JwksController (/.well-known/jwks.json)
 │              └── admin/  AdminUsersController, AdminServicesController,
 │                          AdminActivityController, AdminSetupController
 └── config/    DataSeeder, ActivityRetentionJob
@@ -404,9 +430,16 @@ location / {
 
 - проверен 403 на живом гейте: пользователь без доступа к `fashionmark` на `https://144.31.187.7:8843` попадает на `/denied`, цикла редиректов нет.
 
+Сделано 05.10.2026: **0.2.0 — Gate Auth** (общий стандарт `../gate-auth`, `gate-auth-core` 0.1.0 из Maven Central),
+выкачено на VPS в два шага: сначала без ключа (поведение как раньше), потом с ключом. Репозиторий на GitHub.
+Решение по FashionMark: библиотека ему не нужна (личный однопользовательский инструмент), хватает гейта.
+Первое приложение на gate-auth — newBikeService (`../BikeServiceStuff/newBikeService`).
+
 1. **Сменить пароль админа**, если он был сгенерирован автоматически.
 2. **Научить генератор выдавать блок самого гейта** (443 `default_server` + редирект с 80), чтобы и его не писать руками.
 3. **Собрать native-образ** и сравнить реальное потребление памяти с JVM-вариантом.
-4. Тесты шире `RedirectTargetsTest`: `/verify` (200/401/403), `AccessVerifier`, защита последнего ADMIN.
+4. Тесты: вход/выход формой, `AccessVerifier` отдельно, защита последнего ADMIN.
+5. При подключении newBikeService: завести сервис (путь API `/api/`, вход из LAN + callback), перегенерировать
+   блок Nginx, отдать приложению публичный ключ.
 
 Отдельно, не про этот сервис: **SSL для репликации** между primary и standby (сейчас WAL идёт по открытому интернету без TLS) и **реальный тест failover** через `pg_promote()`.

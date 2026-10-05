@@ -11,14 +11,9 @@
 
 ## Состояние сборки
 
-Стек соответствует CLAUDE.md: **Java 25 + Spring Boot 4.1**. Сборка проверена — `mvn clean package`
-проходит, собирается исполняемый jar.
-
-```
-Compiling 42 source files with javac [debug parameters release 25]
-spring-boot:4.1.1:repackage → target/gate-service-0.1.0.jar
-BUILD SUCCESS
-```
+Версия **0.2.0** (Gate Auth), развёрнута на VPS 05.10.2026. Стек соответствует CLAUDE.md: **Java 25 + Spring Boot 4.1**.
+`mvn clean package` собирает `target/gate-service-0.2.0.jar`; `mvn test` — 64 теста, из них интеграционные на
+PostgreSQL 16 в Testcontainers (нужен локальный Docker, см. «Gate Auth» ниже).
 
 | | |
 |---|---|
@@ -30,6 +25,7 @@ BUILD SUCCESS
 | **Thymeleaf** | 3.1.5.RELEASE (`thymeleaf-spring6` — так артефакт называется и под Framework 7) |
 | **Flyway** | 12.4.0 |
 | **PostgreSQL JDBC** | 42.7.13 |
+| **gate-auth-core** | 0.1.0 (Maven Central, `io.github.technic47.gateauth`) — подпись токенов Gate Auth |
 
 На 4.2 переходить пока рано: доступен только `4.2.0-M1`, это milestone, не GA.
 Проверить, не вышел ли новый патч 4.1:
@@ -40,7 +36,7 @@ mvn versions:display-parent-updates -DallowMinorUpdates=false -DallowMajorUpdate
 
 **Проверено на живой БД** (PostgreSQL 16 в Docker, профиль `dev`):
 
-- Flyway применяет `V1__init.sql`, `ddl-auto=validate` проходит — схема миграции совпадает с сущностями
+- Flyway применяет `V1__init.sql` и `V2__common_auth.sql`, `ddl-auto=validate` проходит — схема миграций совпадает с сущностями
 - Все страницы отдают 200, включая `/admin/setup` (там record-аксессоры через SpEL)
 - Thymeleaf подставляет CSRF в формы, вход и выход работают
 - `/verify`: 200 на разрешённый сервис, 403 на неизвестный, 403 без заголовка, 401 анонимно
@@ -48,7 +44,8 @@ mvn versions:display-parent-updates -DallowMinorUpdates=false -DallowMajorUpdate
 - USER на `/admin/**` получает 403
 - События пишутся в `activity_log` с причинами отказов
 
-Чего всё ещё не проверял: native-образ и работу за реальным Nginx с `auth_request`.
+Работа за реальным Nginx с `auth_request` проверена на VPS (15.09.2026, Gate Auth — 05.10.2026).
+Чего всё ещё не проверял: native-образ.
 
 ---
 
@@ -86,7 +83,7 @@ CREATE DATABASE gate OWNER gate;
 GRANT pg_monitor TO gate;
 ```
 
-Схему создаст Flyway при первом старте (`src/main/resources/db/migration/V1__init.sql`).
+Схему создаст Flyway при первом старте (`src/main/resources/db/migration/`).
 
 ### 2. Переменные окружения
 
@@ -224,7 +221,20 @@ server {
 раздел «Gate Auth».
 
 Зависимость `gate-auth-core` берётся из Maven Central. `mvn test` поднимает PostgreSQL в Testcontainers —
-нужен локальный Docker (не текущий docker context `vps-germany`!).
+нужен локальный Docker, а активный context обычно `vps-germany`. Поэтому так:
+
+```bash
+DOCKER_HOST=npipe:////./pipe/dockerDesktopLinuxEngine mvn test      # Git Bash
+```
+
+Ключ подписи — `GATE_SIGNING_KEY` в локальном `.env`, **в одинарных кавычках**: `GATE_SIGNING_KEY='{"kty":"OKP",…}'`.
+Сгенерировать (PowerShell, Java 25):
+
+```powershell
+& "$env:USERPROFILE\.jdks\graalvm-jdk-25\bin\java.exe" -cp "$env:USERPROFILE\.m2\repository\io\github\technic47\gateauth\gate-auth-core\0.1.0\gate-auth-core-0.1.0.jar" io.github.technic47.gateauth.core.KeyTool
+```
+
+После смены ключа: `docker compose up -d --force-recreate gate`, в логе — `ключ подписи загружен, kid=…`.
 
 ## Два адреса у сервиса
 
@@ -303,19 +313,21 @@ stdout контейнеров — логи Postgres, Nginx и самого ге�
 
 ```
 src/main/java/com/technic/gate/
-├── domain/      сущности: User, ProtectedService, ActivityLog, GateSetting + enum-ы
+├── domain/      сущности: User, ProtectedService, UserServiceRole, ActivityLog, GateSetting + enum-ы
 ├── repo/        Spring Data репозитории
 ├── security/    SecurityConfig, UserDetails, обработчики входа/выхода, лок по попыткам
 ├── service/     AccessVerifier (решение о доступе), ActivityService (журнал),
 │                UserAdminService, ServiceCatalogService, GateSettingsService,
-│                HealthProbe, NginxConfigGenerator, DatabaseStatusService
-├── web/         AuthController, PortalController, VerifyController + admin/
+│                HealthProbe, NginxConfigGenerator, DatabaseStatusService,
+│                GateTokenService (Gate Auth: подпись токенов, JWKS)
+├── web/         AuthController, PortalController, VerifyController,
+│                HandoffController, JwksController + admin/
 └── config/      DataSeeder, ActivityRetentionJob
 
 src/main/resources/
 ├── templates/   layout.html (фрагменты) + страницы
 ├── static/css/  app.css
-└── db/migration/V1__init.sql
+└── db/migration/V1__init.sql, V2__common_auth.sql
 ```
 
 `thymeleaf-layout-dialect` не используется — тянет Groovy и несовместим с native-image
