@@ -77,8 +77,10 @@ public class AdminRolesController {
                          @RequestParam String name,
                          @RequestParam(required = false) String description,
                          @RequestParam(defaultValue = "0") int sortOrder,
+                         @RequestParam(required = false) Long serviceId,
                          @AuthenticationPrincipal GateUserDetails actor,
                          RedirectAttributes redirectAttributes) {
+        roleCatalog.changeScope(id, serviceId, actor.getUsername());
         var role = roleCatalog.update(id, name, description, sortOrder, actor.getUsername());
         redirectAttributes.addFlashAttribute("successMessage", "Роль " + role.getCode() + " сохранена");
         return "redirect:/admin/roles";

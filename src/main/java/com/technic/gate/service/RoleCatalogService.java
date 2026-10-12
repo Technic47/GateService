@@ -23,8 +23,9 @@ import java.util.stream.Collectors;
  *
  * Правила:
  * <ul>
- *   <li>код — строчная латиница ({@link RoleCatalog#CODE}), после создания не меняется, как и принадлежность
- *       (глобальная / приложение);</li>
+ *   <li>код — строчная латиница ({@link RoleCatalog#CODE}), после создания не меняется;</li>
+ *   <li>принадлежность меняется ({@link #changeScope}): роль сервиса → глобальная, если кода нет больше нигде;
+ *       глобальная → роль сервиса, если она не выдана в других сервисах;</li>
  *   <li>в одном приложении код не повторяется: глобальный код не может совпасть с кодом роли какого-либо
  *       приложения и наоборот;</li>
  *   <li>вместо удаления — архив; архивировать можно только роль, которая ни у кого не выдана;</li>
@@ -119,6 +120,42 @@ public class RoleCatalogService {
         AppRole role = require(id);
         role.describe(name, description, sortOrder, clock.instant());
         changed(ActivityType.ROLE_UPDATED, actor, serviceOf(role), "Изменена роль " + role.getCode());
+        return role;
+    }
+
+    /**
+     * Меняет принадлежность роли. Код остаётся, выдачи сохраняются.
+     *
+     * @param serviceId новый сервис или {@code null} — сделать глобальной
+     */
+    @Transactional
+    public AppRole changeScope(Long id, Long serviceId, String actor) {
+        AppRole role = require(id);
+        if (java.util.Objects.equals(role.getServiceId(), serviceId)) {
+            return role;
+        }
+        ProtectedService target = null;
+        if (serviceId == null) {
+            if (roles.existsOtherWithCode(role.getCode(), id)) {
+                throw new GateException("Роль " + role.getCode() + " есть ещё в другом сервисе: глобальная с тем же "
+                        + "кодом дала бы там два одинаковых кода");
+            }
+        } else {
+            target = services.findById(serviceId).orElseThrow(() -> new GateException("Сервис не найден"));
+            if (roles.existsInService(role.getCode(), serviceId)) {
+                throw new GateException("В сервисе " + target.getName() + " роль " + role.getCode() + " уже есть");
+            }
+            long elsewhere = assignments.countByRoleIdOutsideService(id, serviceId);
+            if (elsewhere > 0) {
+                throw new GateException("Роль " + role.getCode() + " выдана в других сервисах (" + elsewhere
+                        + " раз): сначала снимите её там");
+            }
+        }
+        ProtectedService before = serviceOf(role);
+        role.moveTo(serviceId, clock.instant());
+        changed(ActivityType.ROLE_UPDATED, actor, target != null ? target : before,
+                "Роль " + role.getCode() + ": " + (before == null ? "глобальная" : before.getName()) + " → "
+                        + (target == null ? "глобальная" : target.getName()));
         return role;
     }
 

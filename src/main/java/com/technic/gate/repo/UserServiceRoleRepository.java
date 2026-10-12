@@ -24,6 +24,10 @@ public interface UserServiceRoleRepository extends JpaRepository<UserServiceRole
     @Query("select count(r) from UserServiceRole r where r.id.roleId = :roleId")
     long countByRoleId(Long roleId);
 
+    /** Сколько раз роль выдана в других сервисах (глобальную нельзя сделать ролью сервиса, пока она выдана где-то ещё). */
+    @Query("select count(r) from UserServiceRole r where r.id.roleId = :roleId and r.id.serviceId <> :serviceId")
+    long countByRoleIdOutsideService(Long roleId, Long serviceId);
+
     @Modifying
     @Query("delete from UserServiceRole r where r.id.userId = :userId")
     void deleteByUserId(Long userId);

@@ -15,6 +15,7 @@ import java.util.Objects;
  *
  * Глобальная роль ({@code serviceId == null}) — одно определение для всех приложений; выдаётся всё равно на пару
  * пользователь+приложение. Код ({@code code}) после создания не меняется: приложения проверяют его в своём коде.
+ * Принадлежность (глобальная / приложение) меняется через {@code RoleCatalogService.changeScope} с проверками.
  * Вместо удаления — архив. Не путать с {@link Role} — ролью самого гейта (ADMIN/USER).
  */
 @Entity
@@ -34,8 +35,8 @@ public class AppRole {
     @Column(length = 500)
     private String description;
 
-    /** Приложение (сервис) роли; {@code null} — глобальная. Не меняется после создания. */
-    @Column(name = "service_id", updatable = false)
+    /** Приложение (сервис) роли; {@code null} — глобальная. Меняется только через проверки RoleCatalogService. */
+    @Column(name = "service_id")
     private Long serviceId;
 
     @Column(name = "sort_order", nullable = false)
@@ -65,6 +66,12 @@ public class AppRole {
         this.name = Objects.requireNonNull(name, "name").strip();
         this.description = description == null || description.isBlank() ? null : description.strip();
         this.sortOrder = sortOrder;
+        this.updatedAt = now;
+    }
+
+    /** Переносит роль: {@code null} — сделать глобальной, иначе — роль этого сервиса. Проверки — в сервисе. */
+    public void moveTo(Long serviceId, Instant now) {
+        this.serviceId = serviceId;
         this.updatedAt = now;
     }
 

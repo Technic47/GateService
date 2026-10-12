@@ -23,6 +23,10 @@ public interface AppRoleRepository extends JpaRepository<AppRole, Long> {
     @Query("select count(r) > 0 from AppRole r where r.code = :code and r.serviceId is null")
     boolean existsGlobal(String code);
 
+    /** Есть ли другая роль (любой принадлежности) с этим кодом — для переноса роли в глобальные. */
+    @Query("select count(r) > 0 from AppRole r where r.code = :code and r.id <> :id")
+    boolean existsOtherWithCode(String code, Long id);
+
     @Query("select count(r) > 0 from AppRole r where r.code = :code and r.serviceId is not null")
     boolean existsInAnyService(String code);
 

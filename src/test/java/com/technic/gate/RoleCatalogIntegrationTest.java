@@ -114,7 +114,7 @@ class RoleCatalogIntegrationTest {
                 .andExpect(header().string("Content-Type", "application/jwt"))
                 .andReturn().getResponse().getContentAsString();
         RoleCatalog catalog = verifier("bike2").verifyRoleCatalog(body);
-        assertThat(catalog.roles()).extracting(RoleCatalog.Role::code).containsExactly("viewer", "editor");
+        assertThat(catalog.roles()).extracting(RoleCatalog.Role::code).startsWith("viewer", "editor"); // by sort order; other tests add roles
         assertThat(catalog.find("viewer").global()).isTrue();
         assertThat(catalog.find("viewer").description()).isEqualTo("Read everything");
         assertThat(catalog.find("measurer")).isNull(); // another service's role
@@ -158,6 +158,33 @@ class RoleCatalogIntegrationTest {
         assertThatThrownBy(() -> userAdmin.update(userRepository.findByUsernameIgnoreCase("carol").orElseThrow().getId(),
                 Role.USER, true, Set.of(bike.getId()), Map.of(bike.getId(), Set.of(measurer.getId())), "test"))
                 .isInstanceOf(GateException.class);
+    }
+
+    @Test
+    void scopeCanChangeWhenNothingBreaks() {
+        // an app role becomes global: assignments stay, other apps can now use it
+        AppRole reviewer = roles.create("reviewer", "Reviewer", null, bike.getId(), 5, "test");
+        long v = roles.version();
+        roles.changeScope(reviewer.getId(), null, "test");
+        assertThat(roles.require(reviewer.getId()).isGlobal()).isTrue();
+        assertThat(roles.version()).isGreaterThan(v);
+        assertThat(roles.assignable(fashion.getId())).extracting(AppRole::getCode).contains("reviewer");
+
+        // ...and back to one app, as long as it isn't given in another app
+        roles.changeScope(reviewer.getId(), fashion.getId(), "test");
+        assertThat(roles.assignable(bike.getId())).extracting(AppRole::getCode).doesNotContain("reviewer");
+
+        // the same code in two apps can't become one global role
+        AppRole a = roles.create("tester", "Tester", null, bike.getId(), 6, "test");
+        roles.create("tester", "Tester", null, fashion.getId(), 6, "test");
+        assertThatThrownBy(() -> roles.changeScope(a.getId(), null, "test"))
+                .isInstanceOf(GateException.class).hasMessageContaining("другом сервисе");
+
+        // a global role given in bike2 can't become a fashion2-only role
+        AppRole globalViewer = roles.assignable(bike.getId()).stream()
+                .filter(r -> r.getCode().equals("viewer")).findFirst().orElseThrow();
+        assertThatThrownBy(() -> roles.changeScope(globalViewer.getId(), fashion.getId(), "test"))
+                .isInstanceOf(GateException.class).hasMessageContaining("выдана в других");
     }
 
     @Test

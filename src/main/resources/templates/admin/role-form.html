@@ -30,7 +30,7 @@
 
             <div class="field">
                 <label for="serviceId">Где действует</label>
-                <select id="serviceId" name="serviceId" th:disabled="${role != null}">
+                <select id="serviceId" name="serviceId">
                     <option value="" th:selected="${serviceId == null}">Глобальная — во всех сервисах</option>
                     <option th:each="svc : ${allServices}" th:value="${svc.id}"
                             th:selected="${serviceId == svc.id}"
@@ -38,7 +38,8 @@
                 </select>
                 <div class="hint">
                     Глобальную роль можно выдать в любом сервисе — но выдаётся она всё равно отдельно в каждом.
-                    После создания не меняется.
+                    Можно поменять и потом: роль сервиса станет глобальной, если такого кода нет у других сервисов;
+                    глобальная станет ролью сервиса, если она не выдана в других сервисах. Выдачи сохраняются.
                 </div>
             </div>
 
