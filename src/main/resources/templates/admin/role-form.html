@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head(${role} == null ? 'Новая роль' : 'Роль')}"></head>
+<body>
+
+<header th:replace="~{layout :: topbar}"></header>
+
+<div class="page page-narrow">
+    <div th:replace="~{layout :: flash}"></div>
+
+    <div class="page-head">
+        <h1 th:text="${role} == null ? 'Новая роль' : 'Роль ' + ${role.code}">Роль</h1>
+        <p><a th:href="@{/admin/roles}">← ко всем ролям</a></p>
+    </div>
+
+    <div class="card">
+        <form method="post" th:action="${role} == null ? @{/admin/roles} : @{/admin/roles/{id}(id=${role.id})}">
+
+            <div class="field">
+                <label for="code">Код</label>
+                <input type="text" id="code" name="code" class="mono" required maxlength="32"
+                       pattern="[a-z][a-z0-9_\-]{0,31}"
+                       th:value="${role?.code}" th:readonly="${role != null}">
+                <div class="hint">
+                    То, что приходит приложению в claim <span class="mono">roles</span>, например
+                    <span class="mono">editor</span>. Строчная латиница, цифры, дефис, подчёркивание.
+                    <strong>После создания не меняется</strong>: приложения проверяют код в своём коде.
+                </div>
+            </div>
+
+            <div class="field">
+                <label for="serviceId">Где действует</label>
+                <select id="serviceId" name="serviceId" th:disabled="${role != null}">
+                    <option value="" th:selected="${serviceId == null}">Глобальная — во всех сервисах</option>
+                    <option th:each="svc : ${allServices}" th:value="${svc.id}"
+                            th:selected="${serviceId == svc.id}"
+                            th:text="${svc.displayName} + ' (' + ${svc.name} + ')'">Сервис</option>
+                </select>
+                <div class="hint">
+                    Глобальную роль можно выдать в любом сервисе — но выдаётся она всё равно отдельно в каждом.
+                    После создания не меняется.
+                </div>
+            </div>
+
+            <div class="field">
+                <label for="name">Название</label>
+                <input type="text" id="name" name="name" required maxlength="100" th:value="${role?.name}">
+                <div class="hint">Как роль называют в интерфейсах, например «Редактор».</div>
+            </div>
+
+            <div class="field">
+                <label for="description">Описание</label>
+                <textarea id="description" name="description" rows="3" maxlength="500"
+                          th:text="${role?.description}"></textarea>
+                <div class="hint">Что роль должна разрешать — подсказка для того, кто настраивает приложение.</div>
+            </div>
+
+            <div class="field">
+                <label for="sortOrder">Порядок</label>
+                <input type="number" id="sortOrder" name="sortOrder" th:value="${role?.sortOrder} ?: 0">
+                <div class="hint">Меньше — выше в списках.</div>
+            </div>
+
+            <div class="actions">
+                <button type="submit" class="btn">Сохранить</button>
+                <a class="btn btn-secondary" th:href="@{/admin/roles}">Отмена</a>
+            </div>
+        </form>
+    </div>
+</div>
+</body>
+</html>

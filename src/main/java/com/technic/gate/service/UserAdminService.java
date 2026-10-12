@@ -1,11 +1,13 @@
 package com.technic.gate.service;
 
 import com.technic.gate.domain.ActivityType;
+import com.technic.gate.domain.AppRole;
 import com.technic.gate.domain.ProtectedService;
 import com.technic.gate.domain.RegistrationMode;
 import com.technic.gate.domain.Role;
 import com.technic.gate.domain.User;
 import com.technic.gate.domain.UserServiceRole;
+import com.technic.gate.repo.AppRoleRepository;
 import com.technic.gate.repo.ProtectedServiceRepository;
 import com.technic.gate.repo.UserRepository;
 import com.technic.gate.repo.UserServiceRoleRepository;
@@ -32,15 +34,13 @@ public class UserAdminService {
 
     private static final Pattern USERNAME = Pattern.compile("^[a-zA-Z0-9._-]{3,64}$");
 
-    /** Роль в приложении (claim roles): приложение превращает её в ROLE_<ВЕРХНИЙ_РЕГИСТР>. */
-    private static final Pattern APP_ROLE = Pattern.compile("^[a-z][a-z0-9_-]{0,31}$");
-
     private final UserRepository userRepository;
     private final ProtectedServiceRepository serviceRepository;
     private final PasswordEncoder passwordEncoder;
     private final GateSettingsService settingsService;
     private final ActivityService activityService;
     private final UserServiceRoleRepository roleRepository;
+    private final AppRoleRepository appRoleRepository;
     private final GateTokenService tokenService;
 
     public UserAdminService(UserRepository userRepository,
@@ -49,6 +49,7 @@ public class UserAdminService {
                             GateSettingsService settingsService,
                             ActivityService activityService,
                             UserServiceRoleRepository roleRepository,
+                            AppRoleRepository appRoleRepository,
                             GateTokenService tokenService) {
         this.userRepository = userRepository;
         this.serviceRepository = serviceRepository;
@@ -56,14 +57,16 @@ public class UserAdminService {
         this.settingsService = settingsService;
         this.activityService = activityService;
         this.roleRepository = roleRepository;
+        this.appRoleRepository = appRoleRepository;
         this.tokenService = tokenService;
     }
 
-    /** Роли пользователя в приложениях: id сервиса → роль. Для формы пользователя. */
+    /** Роли пользователя в приложениях: id сервиса → id выданных ролей. Для формы пользователя. */
     @Transactional(readOnly = true)
-    public Map<Long, String> appRoles(Long userId) {
-        Map<Long, String> roles = new HashMap<>();
-        roleRepository.findByUserId(userId).forEach(r -> roles.put(r.getServiceId(), r.getRole()));
+    public Map<Long, Set<Long>> appRoles(Long userId) {
+        Map<Long, Set<Long>> roles = new HashMap<>();
+        roleRepository.findByUserId(userId)
+                .forEach(r -> roles.computeIfAbsent(r.getServiceId(), k -> new LinkedHashSet<>()).add(r.getRoleId()));
         return roles;
     }
 
@@ -118,7 +121,7 @@ public class UserAdminService {
     /** Создание пользователя администратором. */
     @Transactional
     public User create(String username, String password, Role role, boolean approved,
-                       Set<Long> serviceIds, Map<Long, String> appRoles, String actor) {
+                       Set<Long> serviceIds, Map<Long, Set<Long>> appRoles, String actor) {
         validateUsername(username);
         validatePassword(password);
         validateAppRoles(appRoles);
@@ -136,11 +139,11 @@ public class UserAdminService {
 
     @Transactional
     /**
-     * @param appRoles роли в приложениях (id сервиса → роль; пусто — без роли).
+     * @param appRoles роли в приложениях (id сервиса → id ролей; пусто — без ролей).
      *                 {@code null} — роли не трогать (быстрые чекбоксы доступа в списке пользователей).
      */
     public void update(Long id, Role role, boolean approved, Set<Long> serviceIds,
-                       Map<Long, String> appRoles, String actor) {
+                       Map<Long, Set<Long>> appRoles, String actor) {
         validateAppRoles(appRoles);
         User user = require(id);
 
@@ -240,12 +243,15 @@ public class UserAdminService {
      * Роли живут только при выданном доступе: роль к сервису без доступа удаляется.
      * {@code appRoles == null} — существующие роли к оставшимся сервисам не меняются.
      */
-    private void applyAppRoles(User user, Map<Long, String> appRoles) {
+    private void applyAppRoles(User user, Map<Long, Set<Long>> appRoles) {
         Set<Long> granted = new LinkedHashSet<>();
         user.getServices().forEach(s -> granted.add(s.getId()));
 
         for (UserServiceRole existing : roleRepository.findByUserId(user.getId())) {
-            if (!granted.contains(existing.getServiceId())) {
+            boolean keep = granted.contains(existing.getServiceId())
+                    && (appRoles == null
+                    || appRoles.getOrDefault(existing.getServiceId(), Set.of()).contains(existing.getRoleId()));
+            if (!keep) {
                 roleRepository.delete(existing);
             }
         }
@@ -253,34 +259,30 @@ public class UserAdminService {
             return;
         }
         for (Long serviceId : granted) {
-            String wanted = normalizeAppRole(appRoles.get(serviceId));
-            UserServiceRole.Key key = new UserServiceRole.Key(user.getId(), serviceId);
-            if (wanted == null) {
-                roleRepository.deleteById(key);
-            } else {
-                UserServiceRole row = roleRepository.findById(key)
-                        .orElseGet(() -> new UserServiceRole(user.getId(), serviceId, wanted));
-                row.setRole(wanted);
-                roleRepository.save(row);
+            for (Long roleId : appRoles.getOrDefault(serviceId, Set.of())) {
+                UserServiceRole.Key key = new UserServiceRole.Key(user.getId(), serviceId, roleId);
+                if (!roleRepository.existsById(key)) {
+                    roleRepository.save(new UserServiceRole(user.getId(), serviceId, roleId));
+                }
             }
         }
     }
 
-    private void validateAppRoles(Map<Long, String> appRoles) {
+    /** Каждая роль должна существовать и выдаваться в этом приложении: глобальная или своя, не в архиве. */
+    private void validateAppRoles(Map<Long, Set<Long>> appRoles) {
         if (appRoles == null) {
             return;
         }
-        for (String value : appRoles.values()) {
-            String role = normalizeAppRole(value);
-            if (role != null && !APP_ROLE.matcher(role).matches()) {
-                throw new GateException("Роль в приложении: строчная латиница, цифры, дефис, "
-                        + "подчёркивание, до 32 символов, с буквы (например admin, editor)");
+        appRoles.forEach((serviceId, roleIds) -> {
+            for (Long roleId : roleIds) {
+                AppRole role = appRoleRepository.findById(roleId)
+                        .orElseThrow(() -> new GateException("Роль не найдена"));
+                if (!role.assignableTo(serviceId)) {
+                    throw new GateException("Роль " + role.getCode() + " нельзя выдать в этом сервисе"
+                            + (role.isArchived() ? ": она в архиве" : ""));
+                }
             }
-        }
-    }
-
-    private static String normalizeAppRole(String value) {
-        return value == null || value.isBlank() ? null : value.trim().toLowerCase(java.util.Locale.ROOT);
+        });
     }
 
     private Set<String> serviceNames(User user) {

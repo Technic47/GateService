@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head th:replace="~{layout :: head('Роли')}"></head>
+<body>
+
+<header th:replace="~{layout :: topbar}"></header>
+
+<div class="page">
+    <div th:replace="~{layout :: flash}"></div>
+
+    <div class="page-head">
+        <h1>Роли приложений</h1>
+        <p>
+            Роли, которые гейт выдаёт приложениям (claim <span class="mono">roles</span> в токене Gate Auth).
+            Глобальная роль доступна в каждом сервисе; роль сервиса — только в нём. Выдаются на странице
+            пользователя, по сервисам, по нескольку. Приложения сами получают свой список и решают,
+            что роль разрешает: новая роль ничего не даёт, пока её не настроят в приложении.
+        </p>
+    </div>
+
+    <div class="actions" style="margin-top:0;margin-bottom:18px">
+        <a class="btn" th:href="@{/admin/roles/new}">Добавить роль</a>
+        <span class="muted" style="font-size:13px">
+            Версия каталога: <span class="mono" th:text="${version}">1</span> — растёт при каждом изменении,
+            приложения по ней понимают, что пора обновить список.
+        </span>
+    </div>
+
+    <div class="card card-tight">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Код</th>
+                    <th>Название</th>
+                    <th>Где действует</th>
+                    <th>Выдана</th>
+                    <th>Состояние</th>
+                    <th class="right">Действия</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="row : ${rows}" th:with="r=${row.role()}">
+                    <td class="mono"><strong th:text="${r.code}">editor</strong></td>
+                    <td>
+                        <span th:text="${r.name}">Редактор</span>
+                        <div class="muted" style="font-size:12px" th:text="${r.description}"></div>
+                    </td>
+                    <td>
+                        <span th:if="${r.global}" class="badge badge-ok">глобальная</span>
+                        <span th:unless="${r.global}">
+                            <span th:text="${row.service()?.displayName} ?: '—'">Сервис</span>
+                            <span class="mono muted" th:if="${row.service() != null}"
+                                  th:text="' (' + ${row.service().name} + ')'"></span>
+                        </span>
+                    </td>
+                    <td class="nowrap" th:text="${row.assigned()} + ' раз'">0 раз</td>
+                    <td>
+                        <span class="badge" th:classappend="${r.archived} ? 'badge-warn' : 'badge-ok'"
+                              th:text="${r.archived} ? 'в архиве' : 'активна'">активна</span>
+                    </td>
+                    <td class="right nowrap">
+                        <a class="btn btn-secondary btn-sm" th:href="@{/admin/roles/{id}(id=${r.id})}">Изменить</a>
+                        <form class="inline-form" method="post" th:action="@{/admin/roles/{id}/archive(id=${r.id})}">
+                            <input type="hidden" name="archived" th:value="${!r.archived}">
+                            <button type="submit" class="btn btn-secondary btn-sm"
+                                    th:disabled="${!r.archived and row.assigned() > 0}"
+                                    th:title="${!r.archived and row.assigned() > 0} ? 'Сначала снимите роль с пользователей' : ''"
+                                    th:text="${r.archived} ? 'Вернуть' : 'В архив'">В архив</button>
+                        </form>
+                    </td>
+                </tr>
+                <tr th:if="${rows.isEmpty()}">
+                    <td colspan="6" class="muted">Ролей пока нет. Добавьте глобальные (например viewer, admin)
+                        или роли конкретного сервиса.</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>

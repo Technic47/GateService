@@ -8,8 +8,8 @@ import static org.mockito.Mockito.when;
 import com.technic.gate.domain.ProtectedService;
 import com.technic.gate.domain.Role;
 import com.technic.gate.domain.User;
-import com.technic.gate.domain.UserServiceRole;
 import com.technic.gate.repo.ProtectedServiceRepository;
+import com.technic.gate.repo.AppRoleRepository;
 import com.technic.gate.repo.UserServiceRoleRepository;
 import io.github.technic47.gateauth.core.GateClaims;
 import io.github.technic47.gateauth.core.GateKeySet;
@@ -28,6 +28,7 @@ class GateTokenServiceTest {
 
     private final GateSigningKey key = GateSigningKey.generate();
     private final UserServiceRoleRepository roles = mock(UserServiceRoleRepository.class);
+    private final AppRoleRepository appRoles = mock(AppRoleRepository.class);
     private final ProtectedServiceRepository services = mock(ProtectedServiceRepository.class);
     private final GateSettingsService settings = mock(GateSettingsService.class);
 
@@ -39,7 +40,7 @@ class GateTokenServiceTest {
     @BeforeEach
     void setUp() throws Exception {
         when(settings.get()).thenReturn(GateSettings.defaults());
-        tokens = new GateTokenService(key, "gate", roles, services, settings, java.time.Clock.systemUTC());
+        tokens = new GateTokenService(key, "gate", roles, appRoles, services, settings, java.time.Clock.systemUTC());
 
         bikeservice = service(10L, "bikeservice");
         fashionmark = service(11L, "fashionmark");
@@ -47,9 +48,9 @@ class GateTokenServiceTest {
         setId(alice, 42L);
         alice.setLastLoginAt(Instant.parse("2026-10-05T10:00:00Z"));
         alice.setServices(Set.of(bikeservice, fashionmark));
-        when(roles.findById(any())).thenReturn(Optional.empty());
-        when(roles.findById(new UserServiceRole.Key(42L, 10L)))
-                .thenReturn(Optional.of(new UserServiceRole(42L, 10L, "member")));
+        when(roles.findActiveCodes(any(), any())).thenReturn(List.of());
+        when(roles.findActiveCodes(42L, 10L)).thenReturn(List.of("editor", "member"));
+        when(appRoles.catalogVersion()).thenReturn(7L);
     }
 
     @Test
@@ -62,7 +63,8 @@ class GateTokenServiceTest {
         assertThat(c.subject()).isEqualTo("42");
         assertThat(c.preferredUsername()).isEqualTo("alice");
         assertThat(c.gateRole()).isEqualTo("USER");
-        assertThat(c.roles()).containsExactly("member");
+        assertThat(c.roles()).containsExactly("editor", "member");
+        assertThat(c.roleVersion()).isEqualTo(7L);
         assertThat(c.services()).containsExactly("bikeservice", "fashionmark");
         assertThat(c.sessionId()).hasSize(22).isNotEqualTo(request.getSession().getId());
     }
@@ -83,7 +85,8 @@ class GateTokenServiceTest {
         String token = tokens.handoff(alice, bikeservice, "nonce-nonce-nonce-1", new MockHttpServletRequest());
         GateClaims c = verifier("bikeservice").verifyHandoff(token, "nonce-nonce-nonce-1");
         assertThat(c.authTime()).isEqualTo(Instant.parse("2026-10-05T10:00:00Z").getEpochSecond());
-        assertThat(c.roles()).containsExactly("member");
+        assertThat(c.roles()).containsExactly("editor", "member");
+        assertThat(c.roleVersion()).isEqualTo(7L);
     }
 
     @Test
@@ -107,7 +110,7 @@ class GateTokenServiceTest {
 
     @Test
     void withoutKeyTokensAreDisabled() {
-        GateTokenService disabled = new GateTokenService(null, "gate", roles, services, settings,
+        GateTokenService disabled = new GateTokenService(null, "gate", roles, appRoles, services, settings,
                 java.time.Clock.systemUTC());
         assertThat(disabled.enabled()).isFalse();
         assertThat(disabled.jwks()).isEmpty();

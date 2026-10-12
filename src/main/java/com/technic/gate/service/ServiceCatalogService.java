@@ -2,6 +2,7 @@ package com.technic.gate.service;
 
 import com.technic.gate.domain.ActivityType;
 import com.technic.gate.domain.ProtectedService;
+import com.technic.gate.repo.AppRoleRepository;
 import com.technic.gate.repo.ProtectedServiceRepository;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -23,11 +24,14 @@ public class ServiceCatalogService {
 
     private final ProtectedServiceRepository repository;
     private final ActivityService activityService;
+    private final AppRoleRepository appRoleRepository;
 
     public ServiceCatalogService(ProtectedServiceRepository repository,
-                                 ActivityService activityService) {
+                                 ActivityService activityService,
+                                 AppRoleRepository appRoleRepository) {
         this.repository = repository;
         this.activityService = activityService;
+        this.appRoleRepository = appRoleRepository;
     }
 
     @Transactional(readOnly = true)
@@ -103,8 +107,9 @@ public class ServiceCatalogService {
     public void delete(Long id, String actor) {
         ProtectedService service = require(id);
         String name = service.getName();
-        // Связи в user_service_access уходят каскадом на уровне схемы (ON DELETE CASCADE).
+        // Связи в user_service_access, роли сервиса и их выдачи уходят каскадом на уровне схемы (ON DELETE CASCADE).
         repository.delete(service);
+        appRoleRepository.bumpCatalogVersion(); // роли сервиса исчезли — версия каталога (claim rv) растёт
 
         activityService.event(ActivityType.SERVICE_DELETED)
                 .user(actor, null)

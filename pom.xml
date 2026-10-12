@@ -17,7 +17,7 @@
 
     <groupId>com.technic</groupId>
     <artifactId>gate-service</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
     <name>gate-service</name>
     <description>Auth gate для сервисов домашнего сервера</description>
 
@@ -26,7 +26,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Общий стандарт авторизации (../gate-auth), из Maven Central:
              io.github.technic47.gateauth:gate-auth-core. -->
-        <gate-auth.version>0.1.0</gate-auth.version>
+        <gate-auth.version>0.2.0</gate-auth.version>
     </properties>
 
     <dependencies>

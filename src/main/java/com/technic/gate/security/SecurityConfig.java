@@ -66,7 +66,8 @@ public class SecurityConfig {
                         // Gate Auth: публичные ключи и вход из LAN. /auth/handoff сам решает,
                         // что делать без сессии: при prompt=none — ответить login_required
                         // приложению, а не показывать форму входа.
-                        .requestMatchers("/.well-known/jwks.json", "/auth/handoff").permitAll()
+                        .requestMatchers("/.well-known/jwks.json", "/.well-known/gate/apps/*/roles", "/auth/handoff")
+                        .permitAll()
                         .requestMatchers("/css/**", "/js/**", "/favicon.ico").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/actuator/**").hasRole("ADMIN")

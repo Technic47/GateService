@@ -33,6 +33,8 @@
                    th:classappend="${activePage == 'users'} ? 'active'">Пользователи</a>
                 <a th:href="@{/admin/services}"
                    th:classappend="${activePage == 'services'} ? 'active'">Настройка сервисов</a>
+                <a th:href="@{/admin/roles}"
+                   th:classappend="${activePage == 'roles'} ? 'active'">Роли</a>
                 <a th:href="@{/admin/activity}"
                    th:classappend="${activePage == 'activity'} ? 'active'">Журнал</a>
                 <a th:href="@{/admin/setup}"

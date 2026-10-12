@@ -2,13 +2,14 @@ package com.technic.gate.service;
 
 import com.technic.gate.domain.ProtectedService;
 import com.technic.gate.domain.User;
-import com.technic.gate.domain.UserServiceRole;
+import com.technic.gate.repo.AppRoleRepository;
 import com.technic.gate.repo.ProtectedServiceRepository;
 import com.technic.gate.repo.UserServiceRoleRepository;
 import io.github.technic47.gateauth.core.Base64Url;
 import io.github.technic47.gateauth.core.GateClaims;
 import io.github.technic47.gateauth.core.GateKeySet;
 import io.github.technic47.gateauth.core.GateSigningKey;
+import io.github.technic47.gateauth.core.RoleCatalog;
 import io.github.technic47.gateauth.core.TokenSigner;
 import io.github.technic47.gateauth.core.TokenType;
 import jakarta.servlet.http.HttpServletRequest;
@@ -52,6 +53,7 @@ public class GateTokenService {
     private final GateKeySet publicKeys;
     private final String issuer;
     private final UserServiceRoleRepository roleRepository;
+    private final AppRoleRepository appRoleRepository;
     private final ProtectedServiceRepository serviceRepository;
     private final GateSettingsService settingsService;
     private final Clock clock;
@@ -62,19 +64,21 @@ public class GateTokenService {
                             @Value("${gate.auth.signing-key-file:}") String signingKeyFile,
                             @Value("${gate.auth.issuer:gate}") String issuer,
                             UserServiceRoleRepository roleRepository,
+                            AppRoleRepository appRoleRepository,
                             ProtectedServiceRepository serviceRepository,
                             GateSettingsService settingsService) {
-        this(loadKey(signingKey, signingKeyFile), issuer, roleRepository, serviceRepository, settingsService,
-                Clock.systemUTC());
+        this(loadKey(signingKey, signingKeyFile), issuer, roleRepository, appRoleRepository, serviceRepository,
+                settingsService, Clock.systemUTC());
     }
 
     GateTokenService(GateSigningKey key, String issuer, UserServiceRoleRepository roleRepository,
-                     ProtectedServiceRepository serviceRepository, GateSettingsService settingsService,
-                     Clock clock) {
+                     AppRoleRepository appRoleRepository, ProtectedServiceRepository serviceRepository,
+                     GateSettingsService settingsService, Clock clock) {
         this.signer = key == null ? null : new TokenSigner(key);
         this.publicKeys = key == null ? null : GateKeySet.of(key.publicKey());
         this.issuer = issuer;
         this.roleRepository = roleRepository;
+        this.appRoleRepository = appRoleRepository;
         this.serviceRepository = serviceRepository;
         this.settingsService = settingsService;
         this.clock = clock;
@@ -88,6 +92,19 @@ public class GateTokenService {
 
     public boolean enabled() {
         return signer != null;
+    }
+
+    /**
+     * Подписанный каталог ролей приложения (§4.5).
+     *
+     * @return пусто, если ключа нет
+     */
+    public Optional<String> signRoleCatalog(String serviceName, long version, List<RoleCatalog.Role> roles) {
+        if (signer == null) {
+            return Optional.empty();
+        }
+        return Optional.of(signer.signRoleCatalog(RoleCatalog.issue(issuer, serviceName, version, roles,
+                clock.instant())));
     }
 
     /** JWKS для {@code /.well-known/jwks.json}; пусто, если ключа нет. */
@@ -145,15 +162,15 @@ public class GateTokenService {
                 .audience(service.getName())
                 .gateRole(user.getRole().name())
                 .roles(rolesFor(user, service))
+                .roleVersion(appRoleRepository.catalogVersion())
                 .services(accessibleServiceNames(user))
                 .issuedAt(Instant.now(clock))
                 .sessionId(sid);
     }
 
+    /** Все активные роли пользователя в приложении (§4.4), по алфавиту; архивные не выдаются. */
     private List<String> rolesFor(User user, ProtectedService service) {
-        return roleRepository.findById(new UserServiceRole.Key(user.getId(), service.getId()))
-                .map(r -> List.of(r.getRole()))
-                .orElse(List.of());
+        return roleRepository.findActiveCodes(user.getId(), service.getId());
     }
 
     /** То же правило, что у портала: админ при adminBypassesAccess видит все включённые сервисы. */

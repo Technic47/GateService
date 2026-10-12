@@ -32,7 +32,12 @@ public enum ActivityType {
     SERVICE_CREATED(Category.ADMIN),
     SERVICE_UPDATED(Category.ADMIN),
     SERVICE_DELETED(Category.ADMIN),
-    SETTINGS_UPDATED(Category.ADMIN);
+    SETTINGS_UPDATED(Category.ADMIN),
+    /** Справочник ролей приложений (Gate Auth §4.5). */
+    ROLE_CREATED(Category.ADMIN),
+    ROLE_UPDATED(Category.ADMIN),
+    ROLE_ARCHIVED(Category.ADMIN),
+    ROLE_RESTORED(Category.ADMIN);
 
     public enum Category { AUTH, ACCESS, ADMIN }
 

@@ -3,6 +3,7 @@ package com.technic.gate.web.admin;
 import com.technic.gate.domain.Role;
 import com.technic.gate.domain.User;
 import com.technic.gate.security.GateUserDetails;
+import com.technic.gate.service.RoleCatalogService;
 import com.technic.gate.service.ServiceCatalogService;
 import com.technic.gate.service.UserAdminService;
 import java.util.HashMap;
@@ -11,6 +12,7 @@ import java.util.Set;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
+import org.springframework.util.MultiValueMap;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,11 +29,21 @@ public class AdminUsersController {
 
     private final UserAdminService userAdminService;
     private final ServiceCatalogService serviceCatalog;
+    private final RoleCatalogService roleCatalog;
 
     public AdminUsersController(UserAdminService userAdminService,
-                                ServiceCatalogService serviceCatalog) {
+                                ServiceCatalogService serviceCatalog,
+                                RoleCatalogService roleCatalog) {
         this.userAdminService = userAdminService;
         this.serviceCatalog = serviceCatalog;
+        this.roleCatalog = roleCatalog;
+    }
+
+    /** id сервиса → роли, которые в нём можно выдать (глобальные и свои), для галочек формы. */
+    private Map<Long, java.util.List<com.technic.gate.domain.AppRole>> assignableByService() {
+        Map<Long, java.util.List<com.technic.gate.domain.AppRole>> map = new HashMap<>();
+        serviceCatalog.findAll().forEach(s -> map.put(s.getId(), roleCatalog.assignable(s.getId())));
+        return map;
     }
 
     @GetMapping
@@ -47,6 +59,7 @@ public class AdminUsersController {
         model.addAttribute("user", null);
         model.addAttribute("appRoles", Map.of());
         model.addAttribute("allServices", serviceCatalog.findAll());
+        model.addAttribute("assignable", assignableByService());
         model.addAttribute("roles", Role.values());
         model.addAttribute("activePage", "users");
         return "admin/user-form";
@@ -59,6 +72,7 @@ public class AdminUsersController {
         model.addAttribute("grantedIds", user.getServices().stream().map(s -> s.getId()).toList());
         model.addAttribute("appRoles", userAdminService.appRoles(id));
         model.addAttribute("allServices", serviceCatalog.findAll());
+        model.addAttribute("assignable", assignableByService());
         model.addAttribute("roles", Role.values());
         model.addAttribute("activePage", "users");
         return "admin/user-form";
@@ -70,7 +84,7 @@ public class AdminUsersController {
                          @RequestParam Role role,
                          @RequestParam(defaultValue = "false") boolean approved,
                          @RequestParam(required = false) Set<Long> serviceIds,
-                         @RequestParam Map<String, String> params,
+                         @RequestParam MultiValueMap<String, String> params,
                          @AuthenticationPrincipal GateUserDetails actor,
                          RedirectAttributes redirectAttributes) {
 
@@ -85,7 +99,7 @@ public class AdminUsersController {
                          @RequestParam Role role,
                          @RequestParam(defaultValue = "false") boolean approved,
                          @RequestParam(required = false) Set<Long> serviceIds,
-                         @RequestParam Map<String, String> params,
+                         @RequestParam MultiValueMap<String, String> params,
                          @AuthenticationPrincipal GateUserDetails actor,
                          RedirectAttributes redirectAttributes) {
 
@@ -110,13 +124,17 @@ public class AdminUsersController {
         return "redirect:/admin/users";
     }
 
-    /** Поля формы appRole_<id сервиса> → карта id сервиса → роль. */
-    private static Map<Long, String> appRoles(Map<String, String> params) {
-        Map<Long, String> roles = new HashMap<>();
-        params.forEach((name, value) -> {
+    /** Галочки формы appRole_<id сервиса> = id роли (несколько на сервис) → карта id сервиса → id ролей. */
+    private static Map<Long, Set<Long>> appRoles(MultiValueMap<String, String> params) {
+        Map<Long, Set<Long>> roles = new HashMap<>();
+        params.forEach((name, values) -> {
             if (name.startsWith("appRole_")) {
                 try {
-                    roles.put(Long.parseLong(name.substring("appRole_".length())), value);
+                    Set<Long> ids = roles.computeIfAbsent(Long.parseLong(name.substring("appRole_".length())),
+                            k -> new java.util.LinkedHashSet<>());
+                    for (String v : values) {
+                        ids.add(Long.parseLong(v));
+                    }
                 } catch (NumberFormatException ignored) {
                     // чужое поле — пропускаем
                 }

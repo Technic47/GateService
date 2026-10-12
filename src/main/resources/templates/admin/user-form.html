@@ -62,26 +62,36 @@
                 Сервисов пока нет. <a th:href="@{/admin/services/new}">Добавить сервис</a>.
             </p>
 
-            <div class="check" th:each="svc : ${allServices}">
-                <input type="checkbox" name="serviceIds"
-                       th:id="'svc-' + ${svc.id}" th:value="${svc.id}"
-                       th:checked="${user != null and user.services.contains(svc)}">
-                <label th:for="'svc-' + ${svc.id}">
-                    <span th:text="${svc.displayName}">Сервис</span>
-                    <span class="mono muted" th:text="' (' + ${svc.name} + ')'"></span>
-                    <span th:if="${!svc.enabled}" class="badge badge-warn">отключён</span>
-                </label>
-                <input type="text" class="mono" style="width:9em;margin-left:auto"
-                       th:name="'appRole_' + ${svc.id}"
-                       th:value="${appRoles[svc.id]}"
-                       placeholder="роль" maxlength="32" pattern="[a-z][a-z0-9_\-]{0,31}"
-                       title="Роль в приложении (Gate Auth), например admin. Пусто — без роли.">
-            </div>
+            <th:block th:each="svc : ${allServices}">
+                <div class="check">
+                    <input type="checkbox" name="serviceIds"
+                           th:id="'svc-' + ${svc.id}" th:value="${svc.id}"
+                           th:checked="${user != null and user.services.contains(svc)}">
+                    <label th:for="'svc-' + ${svc.id}">
+                        <span th:text="${svc.displayName}">Сервис</span>
+                        <span class="mono muted" th:text="' (' + ${svc.name} + ')'"></span>
+                        <span th:if="${!svc.enabled}" class="badge badge-warn">отключён</span>
+                    </label>
+                </div>
+                <th:block th:with="mine=${appRoles[svc.id]}, options=${assignable[svc.id]}">
+                    <div class="role-checks" th:if="${options != null and !options.isEmpty()}"
+                         style="margin:2px 0 10px 28px;display:flex;flex-wrap:wrap;gap:4px 14px">
+                        <label class="check" style="margin:0" th:each="r : ${options}" th:title="${r.description}">
+                            <input type="checkbox" th:name="'appRole_' + ${svc.id}" th:value="${r.id}"
+                                   th:checked="${mine != null and mine.contains(r.id)}">
+                            <span th:text="${r.name}">Роль</span>
+                            <span class="mono muted" th:text="${r.code}"></span>
+                            <span th:if="${r.global}" class="badge" style="font-size:10px">глоб.</span>
+                        </label>
+                    </div>
+                </th:block>
+            </th:block>
 
             <div class="hint" th:unless="${allServices.isEmpty()}">
-                Поле справа — роль пользователя внутри приложения (claim <span class="mono">roles</span>
-                в токене Gate Auth), например <span class="mono">admin</span>. Работает только при выданном
-                доступе; пусто — без роли. Сервисам без библиотеки gate-auth не нужна.
+                Под сервисом — роли пользователя внутри приложения (claim <span class="mono">roles</span> в токене
+                Gate Auth), можно несколько. Действуют только при выданном доступе. Список ролей — на странице
+                <a th:href="@{/admin/roles}">Роли</a> (глобальные и роли сервиса). Сервисам без библиотеки
+                gate-auth роли не нужны.
             </div>
 
             <div class="alert alert-info" style="margin-top:14px"

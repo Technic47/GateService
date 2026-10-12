@@ -10,6 +10,7 @@ import com.technic.gate.domain.Role;
 import com.technic.gate.domain.User;
 import com.technic.gate.repo.UserRepository;
 import com.technic.gate.security.GateUserDetails;
+import com.technic.gate.service.RoleCatalogService;
 import com.technic.gate.service.ServiceCatalogService;
 import com.technic.gate.service.UserAdminService;
 import io.github.technic47.gateauth.core.GateClaims;
@@ -71,6 +72,8 @@ class GateAuthIntegrationTest {
     @Autowired
     UserAdminService userAdmin;
     @Autowired
+    RoleCatalogService roleCatalog;
+    @Autowired
     UserRepository userRepository;
 
     MockMvc mvc;
@@ -85,8 +88,9 @@ class GateAuthIntegrationTest {
                 "https://144.31.187.7:8845", true, null, 0, true, CALLBACK, "/api/", "test");
         serviceCatalog.save(null, "nodirect", "No direct", null, "http", "127.0.0.1", 8082,
                 null, true, null, 0, false, null, null, "test");
+        var member = roleCatalog.create("member", "Member", null, bike.getId(), 0, "test");
         userAdmin.create("alice", "alice-password-1", Role.USER, true, Set.of(bike.getId()),
-                Map.of(bike.getId(), "Member"), "test");
+                Map.of(bike.getId(), Set.of(member.getId())), "test");
         userAdmin.create("bob", "bob-password-1", Role.USER, true, Set.of(), Map.of(), "test");
     }
 
@@ -100,7 +104,7 @@ class GateAuthIntegrationTest {
         GateClaims c = verifier("bikeservice").verifyAssertion(res.getHeader("X-Gate-Assertion"));
         assertThat(c.preferredUsername()).isEqualTo("alice");
         assertThat(c.subject()).isEqualTo(String.valueOf(id("alice")));
-        assertThat(c.roles()).containsExactly("member"); // приведена к нижнему регистру
+        assertThat(c.roles()).containsExactly("member");
         assertThat(c.services()).containsExactly("bikeservice");
         assertThat(res.getHeader("X-Gate-User")).isEqualTo("alice"); // старый заголовок остался
     }
